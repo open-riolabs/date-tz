@@ -44,19 +44,19 @@ export class DateTz implements IDateTz {
         throw new Error(`Invalid timezone: ${value.timezone}`);
       }
     } else {
-      this.timezone = tz || 'UCT';
+      this.timezone = tz || 'UTC';
       if (!timezones[this.timezone]) {
         throw new Error(`Invalid timezone: ${tz}`);
       }
-      this.timestamp = this.stripSMs(value);
+      this.timestamp = value;
     }
   }
 
   /**
-   * Gets the timezone offset in minutes.
+   * Gets the standard timezone offset in minutes.
    */
   get timezoneOffset() {
-    return timezones[this.timezone];
+    return timezones[this.timezone].sdt;
   }
 
   /**
@@ -81,9 +81,10 @@ export class DateTz implements IDateTz {
     return this.timezone === other.timezone;
   }
 
-  /**
+/**
  * Converts the DateTz instance to a string representation.
  * @param pattern - The format pattern (optional).
+ * @param locale - The locale identifier for month names (optional).
  * @returns The formatted date string.
  */
   toString(): string;
@@ -167,11 +168,12 @@ export class DateTz implements IDateTz {
     return pattern.replace(/YYYY|yyyy|YY|yy|MM|LM|DD|HH|hh|mm|ss|aa|AA|tz/g, (match) => tokens[match]);
   }
 
-  /**
+/**
  * Adds a specified amount of time to the DateTz instance.
+ * This method mutates the current instance and returns itself.
  * @param value - The amount of time to add.
  * @param unit - The unit of time ('minute', 'hour', 'day', 'month', 'year').
- * @returns The updated DateTz instance.
+ * @returns The updated DateTz instance (the same mutated instance).
  * @throws Error if the unit is unsupported.
  */
   add(value: number, unit: 'minute' | 'hour' | 'day' | 'month' | 'year') {
@@ -387,7 +389,7 @@ export class DateTz implements IDateTz {
    * @param timestamp - The original timestamp.
    * @returns The timestamp without seconds and milliseconds.
    */
-  private stripSMs(timestamp: number): number {
+  private stripSecondsAndMilliseconds(timestamp: number): number {
     // Calculate the time components
     const days = Math.floor(timestamp / MS_PER_DAY);
     const remainingAfterDays = timestamp % MS_PER_DAY;
@@ -516,21 +518,31 @@ export class DateTz implements IDateTz {
   private daysInYear(year: number) {
     return this.isLeapYear(year) ? 366 : 365;
   }
-
-  /**
+/**
  * Parses a date string into a DateTz instance.
  * @param dateString - The date string to parse.
- * @param pattern - The format pattern (optional).
+ * @param pattern - The format pattern (optional). Supported tokens: YYYY, yyyy, YY, yy, MM, DD, HH, hh, mm, ss, aa, AA.
+ *   - YYYY, yyyy: 4-digit year
+ *   - YY, yy: 2-digit year
+ *   - MM: 2-digit month (01-12)
+ *   - DD: 2-digit day (01-31)
+ *   - HH: 2-digit hour (00-23)
+ *   - hh: 2-digit hour (01-12, requires aa or AA for AM/PM)
+ *   - mm: 2-digit minute (00-59)
+ *   - ss: 2-digit second (00-59)
+ *   - aa: am/pm marker (lowercase)
+ *   - AA: AM/PM marker (uppercase)
  * @param tz - The timezone identifier (optional).
  * @returns A new DateTz instance.
  */
+  static parse(dateString: string, pattern?: string, tz?: string): DateTz {
   static parse(dateString: string, pattern?: string, tz?: string): DateTz {
     if (!pattern) pattern = DateTz.defaultFormat;
     if (!tz) tz = 'UTC';
     if (!timezones[tz]) {
       throw new Error(`Invalid timezone: ${tz}`);
     }
-    if (pattern.includes('hh') && (!pattern.includes('aa') || !pattern.includes('AA'))) {
+    if (pattern.includes('hh') && !(pattern.includes('aa') || pattern.includes('AA'))) {
       throw new Error('AM/PM marker (aa or AA) is required when using 12-hour format (hh)');
     }
 
@@ -561,7 +573,7 @@ export class DateTz implements IDateTz {
     const month = (dateComponents.MM as number) - 1; // Months are zero-based
     const day = dateComponents.DD as number;
     let hour = 0;
-    const ampm = (dateComponents.a || dateComponents.A) as string;
+    const ampm = (dateComponents.aa || dateComponents.AA) as string;
     if (ampm) {
       hour = ampm.toUpperCase() === 'AM' ? (dateComponents.hh as number) : (dateComponents.hh as number) + 12;
     } else {
@@ -602,21 +614,28 @@ export class DateTz implements IDateTz {
    * @param tz - The timezone identifier (optional). Defaults to 'UTC'.
    * @returns A new DateTz instance representing the current date and time.
    */
-  static now(tz?: string): DateTz {
-    if (!tz) tz = 'UTC';
-    const timezone = timezones[tz];
-    if (!timezone) {
-      throw new Error(`Invalid timezone: ${tz}`);
-    }
-    const date = new DateTz(Date.now(), tz);
-    return date;
-  }
-
   get isDst(): boolean {
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: this.timezone,
-      hour12: false,
-      hour: '2-digit',
+    // Get the current date in the target timezone
+    const now = new Date(this.timestamp);
+    // Get the standard offset (assume January, when DST is typically not in effect)
+    const jan = new Date(now.getFullYear(), 0, 1);
+    // Use Intl.DateTimeFormat to get the offsets in minutes
+    const getOffset = (date: Date) => {
+      // Format the date in the target timezone and get the UTC offset
+      const utc = Date.UTC(
+        date.getFullYear(), date.getMonth(), date.getDate(),
+        date.getHours(), date.getMinutes(), date.getSeconds()
+      );
+      // Create a date in the target timezone
+      const tzDate = new Date(date.toLocaleString('en-US', { timeZone: this.timezone }));
+      // Offset in minutes
+      return (tzDate.getTime() - utc) / 60000;
+    };
+    const stdOffset = getOffset(jan);
+    const currOffset = getOffset(now);
+    // If the current offset is less than the standard offset, DST is in effect
+    return currOffset < stdOffset;
+  }
       minute: '2-digit',
       second: '2-digit'
     });
