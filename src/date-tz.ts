@@ -88,6 +88,7 @@ export class DateTz implements IDateTz {
  */
   toString(): string;
   toString(pattern: string): string;
+  toString(pattern: string, locale: string): string;
   toString(pattern?: string, locale?: string): string {
     if (!pattern) pattern = 'YYYY-MM-DD HH:mm:ss';
 
