@@ -1,5 +1,4 @@
 import { IDateTz } from "./idate-tz";
-import { timezones } from "./timezones";
 
 const MS_PER_MINUTE = 60000;
 const MS_PER_HOUR = 3600000;
@@ -37,26 +36,27 @@ export class DateTz implements IDateTz {
   constructor(value: IDateTz);
   constructor(value: number, tz?: string);
   constructor(value: number | IDateTz, tz?: string) {
+    if (tz === 'UTC') tz = 'Etc/UTC';
     if (typeof value === 'object') {
       this.timestamp = value.timestamp;
-      this.timezone = value.timezone || 'UTC';
-      if (!timezones[this.timezone]) {
+      this.timezone = value.timezone || 'Etc/UTC';
+      if (!DateTz.isValidTimeZone(this.timezone)) {
         throw new Error(`Invalid timezone: ${value.timezone}`);
       }
     } else {
-      this.timezone = tz || 'UCT';
-      if (!timezones[this.timezone]) {
+      this.timestamp = value;
+      this.timezone = tz || 'Etc/UTC';
+      if (!DateTz.isValidTimeZone(this.timezone)) {
         throw new Error(`Invalid timezone: ${tz}`);
       }
-      this.timestamp = this.stripSMs(value);
     }
   }
 
   /**
-   * Gets the timezone offset in minutes.
+   * Gets the timezone offset in seconds.
    */
   get timezoneOffset() {
-    return timezones[this.timezone];
+    return DateTz.getOffsetMinutes(this.timestamp, this.timezone) * 60;
   }
 
   /**
@@ -93,7 +93,7 @@ export class DateTz implements IDateTz {
     if (!pattern) pattern = 'YYYY-MM-DD HH:mm:ss';
 
     // Calculate year, month, day, hours, minutes, seconds
-    const offset = (this.isDst ? timezones[this.timezone].dst : timezones[this.timezone].sdt) * 1000;
+    const offset = this.timezoneOffset * 1000;
     let remainingMs = this.timestamp + offset;
     let year = epochYear;
 
@@ -175,7 +175,7 @@ export class DateTz implements IDateTz {
  * @returns The updated DateTz instance.
  * @throws Error if the unit is unsupported.
  */
-  add(value: number, unit: 'minute' | 'hour' | 'day' | 'month' | 'year') {
+  add(value: number, unit: 'minute' | 'hour' | 'day' | 'month' | 'year'): IDateTz {
     let remainingMs = this.timestamp;
 
     // Extract current date components
@@ -276,10 +276,8 @@ export class DateTz implements IDateTz {
     return this;
   }
 
-
-  private _year(considerDst = false) {
-    const offset = considerDst ? (timezones[this.timezone].dst * 1000) : (timezones[this.timezone].sdt * 1000);
-    let remainingMs = this.timestamp + offset;
+  private _year() {
+    let remainingMs = this.timestamp + this.timezoneOffset * 1000;
     let year = 1970;
     let days = Math.floor(remainingMs / MS_PER_DAY);
 
@@ -291,9 +289,8 @@ export class DateTz implements IDateTz {
     return year;
   }
 
-  private _month(considerDst = false) {
-    const offset = considerDst ? (timezones[this.timezone].dst * 1000) : (timezones[this.timezone].sdt * 1000);
-    let remainingMs = this.timestamp + offset;
+  private _month() {
+    let remainingMs = this.timestamp + this.timezoneOffset * 1000;
     let year = 1970;
     let days = Math.floor(remainingMs / MS_PER_DAY);
 
@@ -311,9 +308,8 @@ export class DateTz implements IDateTz {
     return month;
   }
 
-  private _day(considerDst = false) {
-    const offset = considerDst ? (timezones[this.timezone].dst * 1000) : (timezones[this.timezone].sdt * 1000);
-    let remainingMs = this.timestamp + offset;
+  private _day() {
+    let remainingMs = this.timestamp + this.timezoneOffset * 1000;
     let year = 1970;
     let days = Math.floor(remainingMs / MS_PER_DAY);
 
@@ -331,25 +327,22 @@ export class DateTz implements IDateTz {
     return days + 1;
   }
 
-  private _hour(considerDst = false) {
-    const offset = considerDst ? (timezones[this.timezone].dst * 1000) : (timezones[this.timezone].sdt * 1000);
-    let remainingMs = this.timestamp + offset;
+  private _hour() {
+    let remainingMs = this.timestamp + this.timezoneOffset * 1000;
     remainingMs %= MS_PER_DAY;
     let hour = Math.floor(remainingMs / MS_PER_HOUR);
     return hour;
   }
 
-  private _minute(considerDst = false) {
-    const offset = considerDst ? (timezones[this.timezone].dst * 1000) : (timezones[this.timezone].sdt * 1000);
-    let remainingMs = this.timestamp + offset;
+  private _minute() {
+    let remainingMs = this.timestamp + this.timezoneOffset * 1000;
     remainingMs %= MS_PER_HOUR;
     let minute = Math.floor(remainingMs / MS_PER_MINUTE);
     return minute;
   }
 
-  private _dayOfWeek(considerDst = false) {
-    const offset = considerDst ? (timezones[this.timezone].dst * 1000) : (timezones[this.timezone].sdt * 1000);
-    let remainingMs = this.timestamp + offset;
+  private _dayOfWeek() {
+    let remainingMs = this.timestamp + this.timezoneOffset * 1000;
     const date = new Date(remainingMs);
     return date.getDay();
   }
@@ -361,7 +354,8 @@ export class DateTz implements IDateTz {
  * @throws Error if the timezone is invalid.
  */
   convertToTimezone(tz: string) {
-    if (!timezones[tz]) {
+    if (tz === 'UTC') tz = 'Etc/UTC';
+    if (!DateTz.isValidTimeZone(tz)) {
       throw new Error(`Invalid timezone: ${tz}`);
     }
     this.timezone = tz;
@@ -375,7 +369,8 @@ export class DateTz implements IDateTz {
    * @throws Error if the timezone is invalid.
    */
   cloneToTimezone(tz: string) {
-    if (!timezones[tz]) {
+    if (tz === 'UTC') tz = 'Etc/UTC';
+    if (!DateTz.isValidTimeZone(tz)) {
       throw new Error(`Invalid timezone: ${tz}`);
     }
     const clone = new DateTz(this);
@@ -388,10 +383,10 @@ export class DateTz implements IDateTz {
    * @param timestamp - The original timestamp.
    * @returns The timestamp without seconds and milliseconds.
    */
-  private stripSMs(timestamp: number): number {
+  public stripSecMillis(): IDateTz {
     // Calculate the time components
-    const days = Math.floor(timestamp / MS_PER_DAY);
-    const remainingAfterDays = timestamp % MS_PER_DAY;
+    const days = Math.floor(this.timestamp / MS_PER_DAY);
+    const remainingAfterDays = this.timestamp % MS_PER_DAY;
 
     const hours = Math.floor(remainingAfterDays / MS_PER_HOUR);
     const remainingAfterHours = remainingAfterDays % MS_PER_HOUR;
@@ -399,7 +394,8 @@ export class DateTz implements IDateTz {
     const minutes = Math.floor(remainingAfterHours / MS_PER_MINUTE);
 
     // Reconstruct the timestamp without seconds and milliseconds
-    return days * MS_PER_DAY + hours * MS_PER_HOUR + minutes * MS_PER_MINUTE;
+    this.timestamp = days * MS_PER_DAY + hours * MS_PER_HOUR + minutes * MS_PER_MINUTE;
+    return this;
   }
 
   /**
@@ -527,8 +523,9 @@ export class DateTz implements IDateTz {
  */
   static parse(dateString: string, pattern?: string, tz?: string): DateTz {
     if (!pattern) pattern = DateTz.defaultFormat;
-    if (!tz) tz = 'UTC';
-    if (!timezones[tz]) {
+    if (!tz) tz = 'Etc/UTC';
+    if (tz === 'UTC') tz = 'Etc/UTC';
+    if (!DateTz.isValidTimeZone(tz)) {
       throw new Error(`Invalid timezone: ${tz}`);
     }
     if (pattern.includes('hh') && (!pattern.includes('aa') || !pattern.includes('AA'))) {
@@ -591,10 +588,10 @@ export class DateTz implements IDateTz {
     timestamp += minute * MS_PER_MINUTE;
     timestamp += second * 1000;
 
-    const offset = (timezones[tz].sdt) * 1000;
-    let remainingMs = timestamp - offset;
-    const date = new DateTz(remainingMs, tz);
-    date.timestamp -= date.isDst ? (timezones[tz].dst - timezones[tz].sdt) * 1000 : 0;
+
+    const offset = DateTz.getOffsetMinutes(timestamp, tz) * 60 * 1000;
+    timestamp -= offset;
+    const date = new DateTz(timestamp, tz);
     return date;
   }
 
@@ -604,79 +601,86 @@ export class DateTz implements IDateTz {
    * @returns A new DateTz instance representing the current date and time.
    */
   static now(tz?: string): DateTz {
-    if (!tz) tz = 'UTC';
-    const timezone = timezones[tz];
-    if (!timezone) {
+    if (!tz) tz = 'Etc/UTC';
+    if (!DateTz.isValidTimeZone(tz)) {
       throw new Error(`Invalid timezone: ${tz}`);
     }
     const date = new DateTz(Date.now(), tz);
     return date;
   }
 
-  get isDst(): boolean {
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: this.timezone,
-      hour12: false,
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    });
-    const janD = Date.UTC(this._year(), 0, 1, this._hour() - timezones[this.timezone].sdt / 3600, this._minute(), 0);
-    const jan = formatter.format(+janD);
-    const now = formatter.format(this.timestamp);
-    const janMinutes = this.hhmmToMinutes(jan);
-    const nowMinutes = this.hhmmToMinutes(now);
-    return nowMinutes !== janMinutes;
-  }
-
-  private hhmmToMinutes(hhmm: string): number {
-    const [hours, minutes] = hhmm.split(':').map(Number);
-    return hours * 60 + minutes;
-  }
-
-
-
-
   /**
  * Gets the year component of the date.
  */
   get year() {
-    return this._year(true);
+    return this._year();
   }
 
   /**
    * Gets the month component of the date.
    */
   get month() {
-    return this._month(true);
+    return this._month();
   }
 
   /**
    * Gets the day component of the date.
    */
   get day() {
-    return this._day(true);
+    return this._day();
   }
 
   /**
 * Gets the hour component of the time.
 */
   get hour() {
-    return this._hour(true);
+    return this._hour();
   }
 
   /**
    * Gets the minute component of the time.
    */
   get minute() {
-    return this._minute(true);
+    return this._minute();
   }
 
   /**
    * Gets the day of the week.
    */
   get dayOfWeek(): number {
-    return this._dayOfWeek(true);
+    return this._dayOfWeek();
   }
 
+  private static isValidTimeZone(timezone: string): boolean {
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: timezone });
+      return true;
+    } catch (e) {
+      return e instanceof RangeError ? false : true;
+    }
+  }
+
+  private static getOffsetMinutes(timestamp: number, timezone: string): number {
+    if (timezone === 'UTC') return 0;
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      timeZoneName: 'short'
+    });
+    const parts = formatter.formatToParts(new Date(timestamp));
+    const zonePart = parts.find(p => p.type === 'timeZoneName');
+    if (!zonePart?.value) {
+      throw new Error(`Unable to get timeZoneName for timezone ${timezone}`);
+    }
+    const value = zonePart.value.trim().toUpperCase();
+    if (value === 'UTC' || value === 'GMT') return 0;
+    const match = value.match(/^(?:GMT|UTC)?([+-])(\d{1,2})(?::(\d{2}))?$/i);
+    if (!match) {
+      throw new Error(`Unexpected timeZoneName format: ${zonePart.value}`);
+    }
+
+    const sign = match[1] === '+' ? 1 : -1;
+    const hours = parseInt(match[2], 10);
+    const mins = match[3] ? parseInt(match[3], 10) : 0;
+    return sign * (hours * 60 + mins);
+  }
 }
