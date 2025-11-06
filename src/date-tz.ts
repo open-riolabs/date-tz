@@ -56,7 +56,7 @@ export class DateTz implements IDateTz {
    * Gets the timezone offset in seconds.
    */
   get timezoneOffset() {
-    return DateTz.getOffsetMinutes(this.timestamp, this.timezone) * 60;
+    return DateTz.getOffsetSeconds(this.timestamp, this.timezone);
   }
 
   /**
@@ -588,11 +588,57 @@ export class DateTz implements IDateTz {
     timestamp += minute * MS_PER_MINUTE;
     timestamp += second * 1000;
 
+    //////////
 
-    const offset = DateTz.getOffsetMinutes(timestamp, tz) * 60 * 1000;
+    const offset = DateTz.getOffsetSeconds(timestamp, tz) * 1000;
     timestamp -= offset;
     const date = new DateTz(timestamp, tz);
     return date;
+    // const tzInfo = timezones[tz];
+    // const offsets = [tzInfo.sdt, tzInfo.dst];
+    // const targetUtc = Date.UTC(year, month, day, hour, minute, 0);
+
+    // type CandidateRecord = { date: DateTz; delta: number; isDst: boolean; };
+    // const exactMatches: CandidateRecord[] = [];
+    // let nextCandidate: CandidateRecord | undefined;
+    // let previousCandidate: CandidateRecord | undefined;
+
+    // for (const offsetSecondsFromTz of offsets) {
+    //   const candidate = new DateTz(timestamp - offsetSecondsFromTz * 1000, tz);
+    //   const candidateUtc = Date.UTC(candidate.year, candidate.month, candidate.day, candidate.hour, candidate.minute, 0);
+    //   const delta = candidateUtc - targetUtc;
+    //   const record: CandidateRecord = { date: candidate, delta, isDst: candidate.isDst };
+
+    //   if (delta === 0) {
+    //     exactMatches.push(record);
+    //     continue;
+    //   }
+    //   if (delta > 0) {
+    //     if (!nextCandidate || delta < nextCandidate.delta || (delta === nextCandidate.delta && record.isDst && !nextCandidate.isDst)) {
+    //       nextCandidate = record;
+    //     }
+    //     continue;
+    //   }
+    //   if (!previousCandidate || delta > previousCandidate.delta || (delta === previousCandidate.delta && record.isDst && !previousCandidate.isDst)) {
+    //     previousCandidate = record;
+    //   }
+    // }
+
+    // let result: DateTz | undefined;
+    // if (exactMatches.length > 0) {
+    //   exactMatches.sort((a, b) => Number(b.isDst) - Number(a.isDst));
+    //   result = exactMatches[0].date;
+    // } else if (nextCandidate) {
+    //   result = nextCandidate.date;
+    // } else if (previousCandidate) {
+    //   result = previousCandidate.date;
+    // }
+
+    // if (!result) {
+    //   result = new DateTz(timestamp, tz);
+    // }
+
+    // return result;
   }
 
   /**
@@ -660,27 +706,58 @@ export class DateTz implements IDateTz {
     }
   }
 
-  private static getOffsetMinutes(timestamp: number, timezone: string): number {
+  private static getOffsetSeconds(timestamp: number, timezone: string): number {
     if (timezone === 'UTC') return 0;
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      timeZoneName: 'short'
-    });
-    const parts = formatter.formatToParts(new Date(timestamp));
-    const zonePart = parts.find(p => p.type === 'timeZoneName');
-    if (!zonePart?.value) {
-      throw new Error(`Unable to get timeZoneName for timezone ${timezone}`);
-    }
-    const value = zonePart.value.trim().toUpperCase();
-    if (value === 'UTC' || value === 'GMT') return 0;
-    const match = value.match(/^(?:GMT|UTC)?([+-])(\d{1,2})(?::(\d{2}))?$/i);
-    if (!match) {
-      throw new Error(`Unexpected timeZoneName format: ${zonePart.value}`);
-    }
+    const formatterUTC = new Intl.DateTimeFormat('en-US', { timeZone: "Etc/UTC", timeZoneName: 'short', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', });
+    const partsUTC = formatterUTC.formatToParts(timestamp);
+    const timestampUTC = this.utcFromParts(partsUTC);
 
+    const arr: Array<{ offset: number, isDst: boolean; }> = [];
+    for (const time2discover of Array.from({ length: 16 }, (_, i) => timestamp + (8 - i) * 15 * 60 * 1000)) {
+      arr.push(this.tzDiscover(time2discover, timezone));
+    }
+    const min = Math.min(...arr.map(a => a.offset));
+    const max = Math.max(...arr.map(a => a.offset));
+    if (min === max) return min * 60;
+
+
+
+
+  }
+
+  private static lookup(parts: Intl.DateTimeFormatPart[], type: string) {
+    const part = parts.find(p => p.type === type);
+    if (!part) {
+      throw new Error(`Missing part ${type}`);
+    }
+    return part.value;
+  };
+
+  private static utcFromParts(parts: Intl.DateTimeFormatPart[]): number {
+    const year = Number(this.lookup(parts, 'year'));
+    const month = Number(this.lookup(parts, 'month')) - 1;
+    const day = Number(this.lookup(parts, 'day'));
+    const hour = Number(this.lookup(parts, 'hour'));
+    const minute = Number(this.lookup(parts, 'minute'));
+    const second = Number(this.lookup(parts, 'second'));
+    return +Date.UTC(year, month, day, hour, minute, second);
+  }
+
+  private static tzDiscover(timestamp: number, timezone: string): { offset: number, isDst: boolean; } {
+    const formatterTZS = new Intl.DateTimeFormat('en-US', { timeZone: timezone, timeZoneName: 'short', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', });
+    const formatterTZL = new Intl.DateTimeFormat('en-US', { timeZone: timezone, timeZoneName: 'long', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', });
+    const partsTZS = formatterTZS.formatToParts(timestamp);
+    const partsTZL = formatterTZL.formatToParts(timestamp);
+    const isDst = this.lookup(partsTZL, 'timeZoneName')?.toLowerCase().includes('summer');
+
+    const _timezone = this.lookup(partsTZS, 'timeZoneName');
+    if (_timezone === 'UTC' || _timezone === 'GMT') return { isDst: false, offset: 0 };
+
+    const match = _timezone.match(/^(?:GMT|UTC)?([+-])(\d{1,2})(?::(\d{2}))?$/i);
+    if (!match) { throw new Error(`Unexpected timeZoneName format: ${_timezone}`); }
     const sign = match[1] === '+' ? 1 : -1;
     const hours = parseInt(match[2], 10);
     const mins = match[3] ? parseInt(match[3], 10) : 0;
-    return sign * (hours * 60 + mins);
+    return { isDst, offset: sign * (hours * 60 + mins) };
   }
 }
