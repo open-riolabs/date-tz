@@ -26,7 +26,7 @@ export function getOffsetSeconds(timestamp: number, timezone: string): number {
 }
 
 export function tzDiscover(timestamp: number, timezone: string): { offset: number, isDst: boolean; } {
-  const formatterTZS = new Intl.DateTimeFormat('en-US', { timeZone: timezone, timeZoneName: 'short', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', });
+  const formatterTZS = new Intl.DateTimeFormat('en-US', { timeZone: timezone, timeZoneName: 'longOffset', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', });
   const formatterTZL = new Intl.DateTimeFormat('en-US', { timeZone: timezone, timeZoneName: 'long', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', });
   const partsTZS = formatterTZS.formatToParts(timestamp);
   const partsTZL = formatterTZL.formatToParts(timestamp);

@@ -707,4 +707,8 @@ export class DateTz implements IDateTz {
     const date = new DateTz(Date.now(), tz);
     return date;
   }
+
+  static timezones(): string[] {
+    return Intl.supportedValuesOf('timeZone');
+  }
 }
