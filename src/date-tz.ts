@@ -594,51 +594,6 @@ export class DateTz implements IDateTz {
     timestamp -= offset;
     const date = new DateTz(timestamp, tz);
     return date;
-    // const tzInfo = timezones[tz];
-    // const offsets = [tzInfo.sdt, tzInfo.dst];
-    // const targetUtc = Date.UTC(year, month, day, hour, minute, 0);
-
-    // type CandidateRecord = { date: DateTz; delta: number; isDst: boolean; };
-    // const exactMatches: CandidateRecord[] = [];
-    // let nextCandidate: CandidateRecord | undefined;
-    // let previousCandidate: CandidateRecord | undefined;
-
-    // for (const offsetSecondsFromTz of offsets) {
-    //   const candidate = new DateTz(timestamp - offsetSecondsFromTz * 1000, tz);
-    //   const candidateUtc = Date.UTC(candidate.year, candidate.month, candidate.day, candidate.hour, candidate.minute, 0);
-    //   const delta = candidateUtc - targetUtc;
-    //   const record: CandidateRecord = { date: candidate, delta, isDst: candidate.isDst };
-
-    //   if (delta === 0) {
-    //     exactMatches.push(record);
-    //     continue;
-    //   }
-    //   if (delta > 0) {
-    //     if (!nextCandidate || delta < nextCandidate.delta || (delta === nextCandidate.delta && record.isDst && !nextCandidate.isDst)) {
-    //       nextCandidate = record;
-    //     }
-    //     continue;
-    //   }
-    //   if (!previousCandidate || delta > previousCandidate.delta || (delta === previousCandidate.delta && record.isDst && !previousCandidate.isDst)) {
-    //     previousCandidate = record;
-    //   }
-    // }
-
-    // let result: DateTz | undefined;
-    // if (exactMatches.length > 0) {
-    //   exactMatches.sort((a, b) => Number(b.isDst) - Number(a.isDst));
-    //   result = exactMatches[0].date;
-    // } else if (nextCandidate) {
-    //   result = nextCandidate.date;
-    // } else if (previousCandidate) {
-    //   result = previousCandidate.date;
-    // }
-
-    // if (!result) {
-    //   result = new DateTz(timestamp, tz);
-    // }
-
-    // return result;
   }
 
   /**
@@ -708,21 +663,20 @@ export class DateTz implements IDateTz {
 
   private static getOffsetSeconds(timestamp: number, timezone: string): number {
     if (timezone === 'UTC') return 0;
-    const formatterUTC = new Intl.DateTimeFormat('en-US', { timeZone: "Etc/UTC", timeZoneName: 'short', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', });
-    const partsUTC = formatterUTC.formatToParts(timestamp);
-    const timestampUTC = this.utcFromParts(partsUTC);
-
     const arr: Array<{ offset: number, isDst: boolean; }> = [];
-    for (const time2discover of Array.from({ length: 16 }, (_, i) => timestamp + (8 - i) * 15 * 60 * 1000)) {
+    for (const time2discover of Array.from({ length: 16 }, (_, i) => timestamp - (8 - i) * 15 * 60 * 1000)) {
       arr.push(this.tzDiscover(time2discover, timezone));
     }
-    const min = Math.min(...arr.map(a => a.offset));
-    const max = Math.max(...arr.map(a => a.offset));
-    if (min === max) return min * 60;
-
-
-
-
+    const first = arr[0];
+    const last = arr[arr.length - 1];
+    const delta = last.offset - first.offset;
+    if (delta === 0) return first.offset * 60;
+    if (delta > 0) {
+      return first.offset * 60;
+    }
+    if (delta < 0) {
+      return last.offset * 60;
+    }
   }
 
   private static lookup(parts: Intl.DateTimeFormatPart[], type: string) {
@@ -732,16 +686,6 @@ export class DateTz implements IDateTz {
     }
     return part.value;
   };
-
-  private static utcFromParts(parts: Intl.DateTimeFormatPart[]): number {
-    const year = Number(this.lookup(parts, 'year'));
-    const month = Number(this.lookup(parts, 'month')) - 1;
-    const day = Number(this.lookup(parts, 'day'));
-    const hour = Number(this.lookup(parts, 'hour'));
-    const minute = Number(this.lookup(parts, 'minute'));
-    const second = Number(this.lookup(parts, 'second'));
-    return +Date.UTC(year, month, day, hour, minute, second);
-  }
 
   private static tzDiscover(timestamp: number, timezone: string): { offset: number, isDst: boolean; } {
     const formatterTZS = new Intl.DateTimeFormat('en-US', { timeZone: timezone, timeZoneName: 'short', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', });
