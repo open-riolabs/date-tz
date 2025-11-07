@@ -71,4 +71,16 @@ export interface IDateTz {
   readonly minute?: number;
   /** The day of the week (0-6, where 0 is Sunday). */
   readonly dayOfWeek?: number;
+  /** The year component of the date (UTC). */
+  readonly yearUTC?: number;
+  /** The month component of the date (1-12, UTC). */
+  readonly monthUTC?: number;
+  /** The day component of the date (1-31, UTC). */
+  readonly dayUTC?: number;
+  /** The hour component of the date (0-23, UTC). */
+  readonly hourUTC?: number;
+  /** The minute component of the date (0-59, UTC). */
+  readonly minuteUTC?: number;
+  /** The day of the week (0-6, where 0 is Sunday, UTC). */
+  readonly dayOfWeekUTC?: number;
 }

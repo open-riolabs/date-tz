@@ -1,3 +1,4 @@
+import { getOffsetSeconds, isValidTimeZone, tzDiscover } from "./helpers";
 import { IDateTz } from "./idate-tz";
 
 const MS_PER_MINUTE = 60000;
@@ -23,6 +24,9 @@ export class DateTz implements IDateTz {
    */
   timezone: string;
 
+  private _timezoneOffset: number;
+  private _isDst: boolean;
+
   /**
    * The default date format used when converting to string.
    */
@@ -40,23 +44,28 @@ export class DateTz implements IDateTz {
     if (typeof value === 'object') {
       this.timestamp = value.timestamp;
       this.timezone = value.timezone || 'Etc/UTC';
-      if (!DateTz.isValidTimeZone(this.timezone)) {
+      if (!isValidTimeZone(this.timezone)) {
         throw new Error(`Invalid timezone: ${value.timezone}`);
       }
     } else {
       this.timestamp = value;
       this.timezone = tz || 'Etc/UTC';
-      if (!DateTz.isValidTimeZone(this.timezone)) {
+      if (!isValidTimeZone(this.timezone)) {
         throw new Error(`Invalid timezone: ${tz}`);
       }
     }
+    const tzOffset = tzDiscover(this.timestamp, this.timezone);
+    this._timezoneOffset = tzOffset.offset * 60 * 1000;
+    this._isDst = tzOffset.isDst;
   }
 
   /**
-   * Gets the timezone offset in seconds.
+   * Checks if this DateTz instance is comparable with another.
+   * @param other - The other DateTz instance to check.
+   * @returns True if the timezones are the same, otherwise false.
    */
-  get timezoneOffset() {
-    return DateTz.getOffsetSeconds(this.timestamp, this.timezone);
+  isComparable(other: IDateTz): boolean {
+    return this.timezone === other.timezone;
   }
 
   /**
@@ -73,15 +82,6 @@ export class DateTz implements IDateTz {
   }
 
   /**
-   * Checks if this DateTz instance is comparable with another.
-   * @param other - The other DateTz instance to check.
-   * @returns True if the timezones are the same, otherwise false.
-   */
-  isComparable(other: IDateTz): boolean {
-    return this.timezone === other.timezone;
-  }
-
-  /**
  * Converts the DateTz instance to a string representation.
  * @param pattern - The format pattern (optional).
  * @returns The formatted date string.
@@ -93,7 +93,7 @@ export class DateTz implements IDateTz {
     if (!pattern) pattern = 'YYYY-MM-DD HH:mm:ss';
 
     // Calculate year, month, day, hours, minutes, seconds
-    const offset = this.timezoneOffset * 1000;
+    const offset = this.timezoneOffset;
     let remainingMs = this.timestamp + offset;
     let year = epochYear;
 
@@ -276,77 +276,6 @@ export class DateTz implements IDateTz {
     return this;
   }
 
-  private _year() {
-    let remainingMs = this.timestamp + this.timezoneOffset * 1000;
-    let year = 1970;
-    let days = Math.floor(remainingMs / MS_PER_DAY);
-
-    while (days >= this.daysInYear(year)) {
-      days -= this.daysInYear(year);
-      year++;
-    }
-
-    return year;
-  }
-
-  private _month() {
-    let remainingMs = this.timestamp + this.timezoneOffset * 1000;
-    let year = 1970;
-    let days = Math.floor(remainingMs / MS_PER_DAY);
-
-    while (days >= this.daysInYear(year)) {
-      days -= this.daysInYear(year);
-      year++;
-    }
-
-    let month = 0;
-    while (days >= (month === 1 && this.isLeapYear(year) ? 29 : daysPerMonth[month])) {
-      days -= month === 1 && this.isLeapYear(year) ? 29 : daysPerMonth[month];
-      month++;
-    }
-
-    return month;
-  }
-
-  private _day() {
-    let remainingMs = this.timestamp + this.timezoneOffset * 1000;
-    let year = 1970;
-    let days = Math.floor(remainingMs / MS_PER_DAY);
-
-    while (days >= this.daysInYear(year)) {
-      days -= this.daysInYear(year);
-      year++;
-    }
-
-    let month = 0;
-    while (days >= (month === 1 && this.isLeapYear(year) ? 29 : daysPerMonth[month])) {
-      days -= month === 1 && this.isLeapYear(year) ? 29 : daysPerMonth[month];
-      month++;
-    }
-
-    return days + 1;
-  }
-
-  private _hour() {
-    let remainingMs = this.timestamp + this.timezoneOffset * 1000;
-    remainingMs %= MS_PER_DAY;
-    let hour = Math.floor(remainingMs / MS_PER_HOUR);
-    return hour;
-  }
-
-  private _minute() {
-    let remainingMs = this.timestamp + this.timezoneOffset * 1000;
-    remainingMs %= MS_PER_HOUR;
-    let minute = Math.floor(remainingMs / MS_PER_MINUTE);
-    return minute;
-  }
-
-  private _dayOfWeek() {
-    let remainingMs = this.timestamp + this.timezoneOffset * 1000;
-    const date = new Date(remainingMs);
-    return date.getDay();
-  }
-
   /**
  * Converts the DateTz instance to a different timezone.
  * @param tz - The target timezone identifier.
@@ -355,7 +284,7 @@ export class DateTz implements IDateTz {
  */
   convertToTimezone(tz: string) {
     if (tz === 'UTC') tz = 'Etc/UTC';
-    if (!DateTz.isValidTimeZone(tz)) {
+    if (!isValidTimeZone(tz)) {
       throw new Error(`Invalid timezone: ${tz}`);
     }
     this.timezone = tz;
@@ -370,7 +299,7 @@ export class DateTz implements IDateTz {
    */
   cloneToTimezone(tz: string) {
     if (tz === 'UTC') tz = 'Etc/UTC';
-    if (!DateTz.isValidTimeZone(tz)) {
+    if (!isValidTimeZone(tz)) {
       throw new Error(`Invalid timezone: ${tz}`);
     }
     const clone = new DateTz(this);
@@ -497,6 +426,104 @@ export class DateTz implements IDateTz {
   }
 
   /**
+  * Gets the year component of the date.
+  */
+  get year() {
+    return this._year(true);
+  }
+
+  /**
+  * Gets the year UTC component of the date.
+  */
+  get yearUTC() {
+    return this._year(false);
+  }
+
+  /**
+  * Gets the month component of the date.
+  */
+  get month() {
+    return this._month(true);
+  }
+
+  /**
+  * Gets the month UTC component of the date.
+  */
+  get monthUTC() {
+    return this._month(false);
+  }
+
+  /**
+   * Gets the day component of the date.
+   */
+  get day() {
+    return this._day(true);
+  }
+
+  /**
+  * Gets the day UTC component of the date.
+  */
+  get dayUTC() {
+    return this._day(false);
+  }
+
+  /**
+  * Gets the hour component of the time.
+  */
+  get hour() {
+    return this._hour(true);
+  }
+
+  /**
+  * Gets the hour UTC component of the time.
+  */
+  get hourUTC() {
+    return this._hour(false);
+  }
+
+  /**
+  * Gets the minute component of the time.
+  */
+  get minute() {
+    return this._minute(true);
+  }
+
+  /**
+  * Gets the minute UTC component of the time.
+  */
+  get minuteUTC() {
+    return this._minute(false);
+  }
+
+  /**
+   * Gets the day of the week.
+   */
+  get dayOfWeek(): number {
+    return this._dayOfWeek(true);
+  }
+
+  /**
+  * Gets the day UTC of the week.
+  */
+  get dayOfWeekUTC(): number {
+    return this._dayOfWeek(false);
+  }
+
+  /**
+   * Gets the timezone offset in seconds.
+   */
+  get timezoneOffset() {
+    return this._timezoneOffset;
+  }
+
+  /**
+   * Gets the daylight saving time status.
+   */
+  get isDst() {
+    return this._isDst;
+  }
+
+  /**
  * Checks if a given year is a leap year.
  * @param year - The year to check.
  * @returns True if the year is a leap year, otherwise false.
@@ -514,18 +541,89 @@ export class DateTz implements IDateTz {
     return this.isLeapYear(year) ? 366 : 365;
   }
 
+  private _year(local?: boolean) {
+    let remainingMs = this.timestamp + (local ? this.timezoneOffset : 0);
+    let year = 1970;
+    let days = Math.floor(remainingMs / MS_PER_DAY);
+
+    while (days >= this.daysInYear(year)) {
+      days -= this.daysInYear(year);
+      year++;
+    }
+
+    return year;
+  }
+
+  private _month(local?: boolean) {
+    let remainingMs = this.timestamp + (local ? this.timezoneOffset : 0);
+    let year = 1970;
+    let days = Math.floor(remainingMs / MS_PER_DAY);
+
+    while (days >= this.daysInYear(year)) {
+      days -= this.daysInYear(year);
+      year++;
+    }
+
+    let month = 0;
+    while (days >= (month === 1 && this.isLeapYear(year) ? 29 : daysPerMonth[month])) {
+      days -= month === 1 && this.isLeapYear(year) ? 29 : daysPerMonth[month];
+      month++;
+    }
+
+    return month;
+  }
+
+  private _day(local?: boolean) {
+    let remainingMs = this.timestamp + (local ? this.timezoneOffset : 0);
+    let year = 1970;
+    let days = Math.floor(remainingMs / MS_PER_DAY);
+
+    while (days >= this.daysInYear(year)) {
+      days -= this.daysInYear(year);
+      year++;
+    }
+
+    let month = 0;
+    while (days >= (month === 1 && this.isLeapYear(year) ? 29 : daysPerMonth[month])) {
+      days -= month === 1 && this.isLeapYear(year) ? 29 : daysPerMonth[month];
+      month++;
+    }
+
+    return days + 1;
+  }
+
+  private _hour(local?: boolean) {
+    let remainingMs = this.timestamp + (local ? this.timezoneOffset : 0);
+    remainingMs %= MS_PER_DAY;
+    let hour = Math.floor(remainingMs / MS_PER_HOUR);
+    return hour;
+  }
+
+  private _minute(local?: boolean) {
+    let remainingMs = this.timestamp + (local ? this.timezoneOffset : 0);
+    remainingMs %= MS_PER_HOUR;
+    let minute = Math.floor(remainingMs / MS_PER_MINUTE);
+    return minute;
+  }
+
+  private _dayOfWeek(local?: boolean) {
+    let remainingMs = this.timestamp + (local ? this.timezoneOffset : 0);
+    const date = new Date(remainingMs);
+    return date.getDay();
+  }
+
   /**
- * Parses a date string into a DateTz instance.
- * @param dateString - The date string to parse.
- * @param pattern - The format pattern (optional).
- * @param tz - The timezone identifier (optional).
- * @returns A new DateTz instance.
- */
+* Parses a date string into a DateTz instance.
+* @param dateString - The date string to parse.
+* @param pattern - The format pattern (optional).
+* @param tz - The timezone identifier (optional).
+* @returns A new DateTz instance.
+*/
   static parse(dateString: string, pattern?: string, tz?: string): DateTz {
     if (!pattern) pattern = DateTz.defaultFormat;
     if (!tz) tz = 'Etc/UTC';
     if (tz === 'UTC') tz = 'Etc/UTC';
-    if (!DateTz.isValidTimeZone(tz)) {
+    if (!isValidTimeZone(tz)) {
       throw new Error(`Invalid timezone: ${tz}`);
     }
     if (pattern.includes('hh') && (!pattern.includes('aa') || !pattern.includes('AA'))) {
@@ -590,7 +688,7 @@ export class DateTz implements IDateTz {
 
     //////////
 
-    const offset = DateTz.getOffsetSeconds(timestamp, tz) * 1000;
+    const offset = getOffsetSeconds(timestamp, tz) * 1000;
     timestamp -= offset;
     const date = new DateTz(timestamp, tz);
     return date;
@@ -603,105 +701,10 @@ export class DateTz implements IDateTz {
    */
   static now(tz?: string): DateTz {
     if (!tz) tz = 'Etc/UTC';
-    if (!DateTz.isValidTimeZone(tz)) {
+    if (!isValidTimeZone(tz)) {
       throw new Error(`Invalid timezone: ${tz}`);
     }
     const date = new DateTz(Date.now(), tz);
     return date;
-  }
-
-  /**
- * Gets the year component of the date.
- */
-  get year() {
-    return this._year();
-  }
-
-  /**
-   * Gets the month component of the date.
-   */
-  get month() {
-    return this._month();
-  }
-
-  /**
-   * Gets the day component of the date.
-   */
-  get day() {
-    return this._day();
-  }
-
-  /**
-* Gets the hour component of the time.
-*/
-  get hour() {
-    return this._hour();
-  }
-
-  /**
-   * Gets the minute component of the time.
-   */
-  get minute() {
-    return this._minute();
-  }
-
-  /**
-   * Gets the day of the week.
-   */
-  get dayOfWeek(): number {
-    return this._dayOfWeek();
-  }
-
-  private static isValidTimeZone(timezone: string): boolean {
-    try {
-      new Intl.DateTimeFormat('en-US', { timeZone: timezone });
-      return true;
-    } catch (e) {
-      return e instanceof RangeError ? false : true;
-    }
-  }
-
-  private static getOffsetSeconds(timestamp: number, timezone: string): number {
-    if (timezone === 'UTC') return 0;
-    const arr: Array<{ offset: number, isDst: boolean; }> = [];
-    for (const time2discover of Array.from({ length: 16 }, (_, i) => timestamp - (8 - i) * 15 * 60 * 1000)) {
-      arr.push(this.tzDiscover(time2discover, timezone));
-    }
-    const first = arr[0];
-    const last = arr[arr.length - 1];
-    const delta = last.offset - first.offset;
-    if (delta === 0) return first.offset * 60;
-    if (delta > 0) {
-      return first.offset * 60;
-    }
-    if (delta < 0) {
-      return last.offset * 60;
-    }
-  }
-
-  private static lookup(parts: Intl.DateTimeFormatPart[], type: string) {
-    const part = parts.find(p => p.type === type);
-    if (!part) {
-      throw new Error(`Missing part ${type}`);
-    }
-    return part.value;
-  };
-
-  private static tzDiscover(timestamp: number, timezone: string): { offset: number, isDst: boolean; } {
-    const formatterTZS = new Intl.DateTimeFormat('en-US', { timeZone: timezone, timeZoneName: 'short', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', });
-    const formatterTZL = new Intl.DateTimeFormat('en-US', { timeZone: timezone, timeZoneName: 'long', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', });
-    const partsTZS = formatterTZS.formatToParts(timestamp);
-    const partsTZL = formatterTZL.formatToParts(timestamp);
-    const isDst = this.lookup(partsTZL, 'timeZoneName')?.toLowerCase().includes('summer');
-
-    const _timezone = this.lookup(partsTZS, 'timeZoneName');
-    if (_timezone === 'UTC' || _timezone === 'GMT') return { isDst: false, offset: 0 };
-
-    const match = _timezone.match(/^(?:GMT|UTC)?([+-])(\d{1,2})(?::(\d{2}))?$/i);
-    if (!match) { throw new Error(`Unexpected timeZoneName format: ${_timezone}`); }
-    const sign = match[1] === '+' ? 1 : -1;
-    const hours = parseInt(match[2], 10);
-    const mins = match[3] ? parseInt(match[3], 10) : 0;
-    return { isDst, offset: sign * (hours * 60 + mins) };
   }
 }
