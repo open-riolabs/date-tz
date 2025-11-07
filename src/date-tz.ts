@@ -1,4 +1,4 @@
-import { getOffsetSeconds, isValidTimeZone, tzDiscover } from "./helpers";
+import { getOffsetSeconds, tzDiscover } from "./helpers";
 import { IDateTz } from "./idate-tz";
 
 const MS_PER_MINUTE = 60000;
@@ -44,13 +44,13 @@ export class DateTz implements IDateTz {
     if (typeof value === 'object') {
       this.timestamp = value.timestamp;
       this.timezone = value.timezone || 'Etc/UTC';
-      if (!isValidTimeZone(this.timezone)) {
+      if (!DateTz.isValidTimeZone(this.timezone)) {
         throw new Error(`Invalid timezone: ${value.timezone}`);
       }
     } else {
       this.timestamp = value;
       this.timezone = tz || 'Etc/UTC';
-      if (!isValidTimeZone(this.timezone)) {
+      if (!DateTz.isValidTimeZone(this.timezone)) {
         throw new Error(`Invalid timezone: ${tz}`);
       }
     }
@@ -284,7 +284,7 @@ export class DateTz implements IDateTz {
  */
   convertToTimezone(tz: string) {
     if (tz === 'UTC') tz = 'Etc/UTC';
-    if (!isValidTimeZone(tz)) {
+    if (!DateTz.isValidTimeZone(tz)) {
       throw new Error(`Invalid timezone: ${tz}`);
     }
     this.timezone = tz;
@@ -299,7 +299,7 @@ export class DateTz implements IDateTz {
    */
   cloneToTimezone(tz: string) {
     if (tz === 'UTC') tz = 'Etc/UTC';
-    if (!isValidTimeZone(tz)) {
+    if (!DateTz.isValidTimeZone(tz)) {
       throw new Error(`Invalid timezone: ${tz}`);
     }
     const clone = new DateTz(this);
@@ -623,7 +623,7 @@ export class DateTz implements IDateTz {
     if (!pattern) pattern = DateTz.defaultFormat;
     if (!tz) tz = 'Etc/UTC';
     if (tz === 'UTC') tz = 'Etc/UTC';
-    if (!isValidTimeZone(tz)) {
+    if (!DateTz.isValidTimeZone(tz)) {
       throw new Error(`Invalid timezone: ${tz}`);
     }
     if (pattern.includes('hh') && (!pattern.includes('aa') || !pattern.includes('AA'))) {
@@ -701,7 +701,7 @@ export class DateTz implements IDateTz {
    */
   static now(tz?: string): DateTz {
     if (!tz) tz = 'Etc/UTC';
-    if (!isValidTimeZone(tz)) {
+    if (!DateTz.isValidTimeZone(tz)) {
       throw new Error(`Invalid timezone: ${tz}`);
     }
     const date = new DateTz(Date.now(), tz);
@@ -710,5 +710,9 @@ export class DateTz implements IDateTz {
 
   static timezones(): string[] {
     return Intl.supportedValuesOf('timeZone');
+  }
+
+  private static isValidTimeZone(timezone: string): boolean {
+    return Intl.supportedValuesOf('timeZone').includes(timezone);
   }
 }

@@ -1,12 +1,3 @@
-export function isValidTimeZone(timezone: string): boolean {
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone: timezone });
-    return true;
-  } catch (e) {
-    return e instanceof RangeError ? false : true;
-  }
-}
-
 export function getOffsetSeconds(timestamp: number, timezone: string): number {
   if (timezone === 'UTC') return 0;
   const arr: Array<{ offset: number, isDst: boolean; }> = [];
@@ -44,7 +35,7 @@ export function tzDiscover(timestamp: number, timezone: string): { offset: numbe
   return { isDst, offset: sign * (hours * 60 + mins) };
 }
 
-export function getTimeFormatPart(parts: Intl.DateTimeFormatPart[], type: string) {
+function getTimeFormatPart(parts: Intl.DateTimeFormatPart[], type: string) {
   const part = parts.find(p => p.type === type);
   if (!part) {
     throw new Error(`Missing part ${type}`);

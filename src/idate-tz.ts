@@ -7,8 +7,7 @@ export interface IDateTz {
   timestamp: number;
   /** The timezone identifier (e.g., 'America/New_York'). */
   timezone?: string;
-  /** The timezone offset information. */
-  readonly timezoneOffset?: number;
+
   /**
    * Compares this date with another IDateTz.
    * @param other The other IDateTz to compare with.
@@ -58,6 +57,8 @@ export interface IDateTz {
  * @returns The timestamp without seconds and milliseconds.
  */
   stripSecMillis?(): IDateTz;
+  /** The timezone offset information. */
+  readonly timezoneOffset?: number;
   readonly isDst?: boolean;
   /** The year component of the date. */
   readonly year?: number;
