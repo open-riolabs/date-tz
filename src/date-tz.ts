@@ -41,15 +41,16 @@ export class DateTz implements IDateTz {
   constructor(value: IDateTz);
   constructor(value: number, tz?: string);
   constructor(value: number | IDateTz, tz?: string) {
-    if (tz === 'UTC') tz = 'Etc/UTC';
     if (typeof value === 'object') {
       this.timestamp = value.timestamp;
       this.timezone = value.timezone || 'Etc/UTC';
+      if (this.timezone === 'UTC') this.timezone = 'Etc/UTC';
       if (!DateTz.isValidTimeZone(this.timezone)) {
         throw new Error(`Invalid timezone: ${value.timezone}`);
       }
     } else {
       this.timestamp = value;
+      if (tz === 'UTC') tz = 'Etc/UTC';
       this.timezone = tz || 'Etc/UTC';
       if (!DateTz.isValidTimeZone(this.timezone)) {
         throw new Error(`Invalid timezone: ${tz}`);
@@ -300,6 +301,7 @@ export class DateTz implements IDateTz {
    * @throws Error if the timezone is invalid.
    */
   cloneToTimezone(tz: string) {
+    if (!tz) throw new Error(`Invalid timezone: ${tz}`);
     if (tz === 'UTC') tz = 'Etc/UTC';
     tz = DateTz.fallbackTimeZone(tz);
     if (!DateTz.isValidTimeZone(tz)) {
@@ -705,6 +707,7 @@ export class DateTz implements IDateTz {
    */
   static now(tz?: string): DateTz {
     if (!tz) tz = 'Etc/UTC';
+    if (tz === 'UTC') tz = 'Etc/UTC';
     tz = DateTz.fallbackTimeZone(tz);
     if (!DateTz.isValidTimeZone(tz)) {
       throw new Error(`Invalid timezone: ${tz}`);
