@@ -1,4 +1,5 @@
-import { getOffsetSeconds, tzDiscover } from "./helpers";
+import { canonicalLink, etc } from "./canonical-link";
+import { getOffsetSeconds, tzDiscover, } from "./helpers";
 import { IDateTz } from "./idate-tz";
 
 const MS_PER_MINUTE = 60000;
@@ -284,6 +285,7 @@ export class DateTz implements IDateTz {
  */
   convertToTimezone(tz: string) {
     if (tz === 'UTC') tz = 'Etc/UTC';
+    tz = DateTz.fallbackTimeZone(tz);
     if (!DateTz.isValidTimeZone(tz)) {
       throw new Error(`Invalid timezone: ${tz}`);
     }
@@ -299,6 +301,7 @@ export class DateTz implements IDateTz {
    */
   cloneToTimezone(tz: string) {
     if (tz === 'UTC') tz = 'Etc/UTC';
+    tz = DateTz.fallbackTimeZone(tz);
     if (!DateTz.isValidTimeZone(tz)) {
       throw new Error(`Invalid timezone: ${tz}`);
     }
@@ -623,6 +626,7 @@ export class DateTz implements IDateTz {
     if (!pattern) pattern = DateTz.defaultFormat;
     if (!tz) tz = 'Etc/UTC';
     if (tz === 'UTC') tz = 'Etc/UTC';
+    tz = DateTz.fallbackTimeZone(tz);
     if (!DateTz.isValidTimeZone(tz)) {
       throw new Error(`Invalid timezone: ${tz}`);
     }
@@ -701,6 +705,7 @@ export class DateTz implements IDateTz {
    */
   static now(tz?: string): DateTz {
     if (!tz) tz = 'Etc/UTC';
+    tz = DateTz.fallbackTimeZone(tz);
     if (!DateTz.isValidTimeZone(tz)) {
       throw new Error(`Invalid timezone: ${tz}`);
     }
@@ -709,44 +714,32 @@ export class DateTz implements IDateTz {
   }
 
   static timezones(): string[] {
-    return [
-      "Etc/GMT",
-      "Etc/GMT+0",
-      "Etc/GMT+1",
-      "Etc/GMT+10",
-      "Etc/GMT+11",
-      "Etc/GMT+12",
-      "Etc/GMT+2",
-      "Etc/GMT+3",
-      "Etc/GMT+4",
-      "Etc/GMT+5",
-      "Etc/GMT+6",
-      "Etc/GMT+7",
-      "Etc/GMT+8",
-      "Etc/GMT+9",
-      "Etc/GMT-0",
-      "Etc/GMT-1",
-      "Etc/GMT-10",
-      "Etc/GMT-11",
-      "Etc/GMT-12",
-      "Etc/GMT-13",
-      "Etc/GMT-14",
-      "Etc/GMT-2",
-      "Etc/GMT-3",
-      "Etc/GMT-4",
-      "Etc/GMT-5",
-      "Etc/GMT-6",
-      "Etc/GMT-7",
-      "Etc/GMT-8",
-      "Etc/GMT-9",
-      "Etc/GMT0",
-      "Etc/Greenwich",
-      "Etc/UCT",
-      "Etc/UTC",
-      "Etc/Universal",
-      "Etc/Zulu",
+    return Array.from(new Set([
+      ...etc,
+      ...Intl.supportedValuesOf('timeZone'),
+      ...Object.keys(canonicalLink),
+      ...Object.values(canonicalLink)
+    ])).sort();
+  }
+
+  static supportedTimeZones(): string[] {
+    const canonical = Array.from(new Set([
+      ...etc,
       ...Intl.supportedValuesOf('timeZone')
-    ].sort();
+    ]));
+    return canonical;
+  }
+
+  private static fallbackTimeZone(timezone: string): string {
+    if (DateTz.supportedTimeZones().includes(timezone)) {
+      return timezone;
+    } else if (Object.keys(canonicalLink).includes(timezone) && DateTz.supportedTimeZones().includes(canonicalLink[timezone])) {
+      return canonicalLink[timezone];
+    } else if (Object.values(canonicalLink).includes(timezone) && DateTz.supportedTimeZones().includes(Object.entries(canonicalLink).find(([k, v]) => v === timezone)?.[0])) {
+      return Object.entries(canonicalLink).find(([k, v]) => v === timezone)?.[0];
+    } else {
+      throw new Error(`Unsupported time zone: ${timezone}`);
+    }
   }
 
   private static isValidTimeZone(timezone: string): boolean {

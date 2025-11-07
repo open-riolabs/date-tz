@@ -1,3 +1,5 @@
+import { canonicalLink, etc } from "./canonical-link";
+
 export function getOffsetSeconds(timestamp: number, timezone: string): number {
   if (timezone === 'UTC') return 0;
   const arr: Array<{ offset: number, isDst: boolean; }> = [];
@@ -42,3 +44,23 @@ function getTimeFormatPart(parts: Intl.DateTimeFormatPart[], type: string) {
   }
   return part.value;
 };
+
+function supportedTimeZones(): string[] {
+  const canonical = Array.from(new Set([
+    ...etc,
+    ...Intl.supportedValuesOf('timeZone')
+  ]));
+  return canonical;
+}
+
+function fallbackTimeZone(timezone: string): string {
+  if (supportedTimeZones().includes(timezone)) {
+    return timezone;
+  } else if (Object.keys(canonicalLink).includes(timezone) && supportedTimeZones().includes(canonicalLink[timezone])) {
+    return canonicalLink[timezone];
+  } else if (Object.values(canonicalLink).includes(timezone) && supportedTimeZones().includes(Object.entries(canonicalLink).find(([k, v]) => v === timezone)?.[0])) {
+    return Object.entries(canonicalLink).find(([k, v]) => v === timezone)?.[0];
+  } else {
+    throw new Error(`Unsupported time zone: ${timezone}`);
+  }
+}

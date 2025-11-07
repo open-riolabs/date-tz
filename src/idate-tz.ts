@@ -51,6 +51,12 @@ export interface IDateTz {
   cloneToTimezone?(tz: string): IDateTz;
   /** Indicates if the date is in daylight saving time. */
 
+  /** Converts the date to a different timezone.
+   * @param tz The target timezone identifier.
+   * @returns A new IDateTz in the specified timezone.
+   */
+  convertToTimezone(tz: string): IDateTz;
+
   /**
  * Strips seconds and milliseconds from the timestamp.
  * @param timestamp - The original timestamp.
@@ -59,6 +65,7 @@ export interface IDateTz {
   stripSecMillis?(): IDateTz;
   /** The timezone offset information. */
   readonly timezoneOffset?: number;
+  /** Indicates if the date is in daylight saving time. */
   readonly isDst?: boolean;
   /** The year component of the date. */
   readonly year?: number;
