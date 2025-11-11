@@ -617,6 +617,9 @@ export class DateTz implements IDateTz {
     return date.getDay();
   }
 
+  private static _supportedTimezones: string[];
+  private static _timezones: string[];
+
   /**
 * Parses a date string into a DateTz instance.
 * @param dateString - The date string to parse.
@@ -717,20 +720,24 @@ export class DateTz implements IDateTz {
   }
 
   static timezones(): string[] {
-    return Array.from(new Set([
-      ...etc,
-      ...Intl.supportedValuesOf('timeZone'),
-      ...Object.keys(canonicalLink),
-      ...Object.values(canonicalLink)
-    ])).sort();
+    if (!this._timezones) {
+      this._timezones = Array.from(new Set([
+        ...this.supportedTimeZones(),
+        ...Object.keys(canonicalLink),
+        ...Object.values(canonicalLink)
+      ])).sort();
+    }
+    return this._timezones;
   }
 
   static supportedTimeZones(): string[] {
-    const canonical = Array.from(new Set([
-      ...etc,
-      ...Intl.supportedValuesOf('timeZone')
-    ]));
-    return canonical;
+    if (!this._supportedTimezones) {
+      this._supportedTimezones = Array.from(new Set([
+        ...etc,
+        ...Intl.supportedValuesOf('timeZone')
+      ]));
+    }
+    return this._supportedTimezones;
   }
 
   private static fallbackTimeZone(timezone: string): string {
