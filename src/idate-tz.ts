@@ -55,7 +55,7 @@ export interface IDateTz {
    * @param tz The target timezone identifier.
    * @returns A new IDateTz in the specified timezone.
    */
-  convertToTimezone(tz: string): IDateTz;
+  convertToTimezone?(tz: string): IDateTz;
 
   /**
  * Strips seconds and milliseconds from the timestamp.
