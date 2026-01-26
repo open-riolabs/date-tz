@@ -145,8 +145,8 @@ export class DateTz implements IDateTz {
     const hour12 = hour % 12 || 12; // Convert to 12-hour format
 
     if (!locale) locale = 'en';
-    let monthStr = new Date(year, month, 3).toLocaleString(locale || 'en', { month: 'long' });
-    monthStr = monthStr.charAt(0).toUpperCase() + monthStr.slice(1);
+    let formatterTzLong = new Intl.DateTimeFormat(locale, { timeZone: this.timezone, hour12: false, month: 'long', weekday: 'long' });
+    let formatterTzShort = new Intl.DateTimeFormat(locale, { timeZone: this.timezone, hour12: false, month: 'short', weekday: 'short' });
 
     // Map components to pattern tokens
     const tokens: Record<string, any> = {
@@ -155,7 +155,8 @@ export class DateTz implements IDateTz {
       yyyy: year.toString(),
       yy: String(year).slice(-2),
       MM: String(month + 1).padStart(2, '0'),
-      LM: monthStr,
+      LM: formatterTzLong.formatToParts(Date.now()).find(o => o.type === 'month').value,
+      SM: formatterTzShort.formatToParts(Date.now()).find(o => o.type === 'month').value,
       DD: String(day).padStart(2, '0'),
       HH: String(hour).padStart(2, '0'),
       mm: String(minute).padStart(2, '0'),
@@ -164,6 +165,8 @@ export class DateTz implements IDateTz {
       AA: pm,
       hh: hour12.toString().padStart(2, '0'),
       tz: this.timezone,
+      WS: formatterTzShort.formatToParts(Date.now()).find(o => o.type === 'weekday').value,
+      WL: formatterTzLong.formatToParts(Date.now()).find(o => o.type === 'weekday').value
     };
 
     // Replace pattern tokens with actual values
@@ -177,7 +180,7 @@ export class DateTz implements IDateTz {
  * @returns The updated DateTz instance.
  * @throws Error if the unit is unsupported.
  */
-  add(value: number, unit: 'minute' | 'hour' | 'day' | 'month' | 'year'): IDateTz {
+  add(value: number, unit: 'millisecond' | 'second' | 'minute' | 'hour' | 'day' | 'month' | 'year'): IDateTz {
     let remainingMs = this.timestamp;
 
     // Extract current date components
@@ -188,6 +191,7 @@ export class DateTz implements IDateTz {
     remainingMs %= MS_PER_HOUR;
     let minute = Math.floor(remainingMs / MS_PER_MINUTE);
     let second = Math.floor((remainingMs % MS_PER_MINUTE) / 1000);
+    let millisecond = remainingMs % 1000;
 
     // Calculate current year
     while (days >= this.daysInYear(year)) {
@@ -206,6 +210,12 @@ export class DateTz implements IDateTz {
 
     // Add time based on the unit
     switch (unit) {
+      case 'millisecond':
+        millisecond += value;
+        break;
+      case 'second':
+        second += value;
+        break;
       case 'minute':
         minute += value;
         break;
@@ -270,6 +280,7 @@ export class DateTz implements IDateTz {
       totalMs += hour * MS_PER_HOUR;
       totalMs += minute * MS_PER_MINUTE;
       totalMs += second * 1000;
+      totalMs += millisecond;
 
       return totalMs;
     })();
@@ -339,7 +350,15 @@ export class DateTz implements IDateTz {
  * @returns The updated DateTz instance.
  * @throws Error if the unit is unsupported.
  */
-  set(value: number, unit: 'year' | 'month' | 'day' | 'hour' | 'minute') {
+  set(value: number, unit: 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second' | 'millisecond') {
+
+    if (unit === 'month' && (value < 1 || value > 12)) throw new Error(`Invalid month: ${value}`);
+    if (unit === 'day' && (value < 1 || value > 31)) throw new Error(`Invalid day: ${value}`);
+    if (unit === 'hour' && (value < 0 || value > 23)) throw new Error(`Invalid hour: ${value}`);
+    if (unit === 'minute' && (value < 0 || value > 59)) throw new Error(`Invalid minute: ${value}`);
+    if (unit === 'second' && (value < 0 || value > 59)) throw new Error(`Invalid second: ${value}`);
+    if (unit === 'millisecond' && (value < 0 || value > 999)) throw new Error(`Invalid millisecond: ${value}`);
+
     let remainingMs = this.timestamp;
 
     // Extract current date components
@@ -350,6 +369,7 @@ export class DateTz implements IDateTz {
     remainingMs %= MS_PER_HOUR;
     let minute = Math.floor(remainingMs / MS_PER_MINUTE);
     let second = Math.floor((remainingMs % MS_PER_MINUTE) / 1000);
+    let millisecond = remainingMs % 1000;
 
     // Calculate current year
     while (days >= this.daysInYear(year)) {
@@ -382,6 +402,12 @@ export class DateTz implements IDateTz {
         break;
       case 'minute':
         minute = value;
+        break;
+      case 'second':
+        second = value;
+        break;
+      case 'millisecond':
+        millisecond = value;
         break;
       default:
         throw new Error(`Unsupported unit: ${unit}`);
@@ -422,6 +448,7 @@ export class DateTz implements IDateTz {
       totalMs += hour * MS_PER_HOUR;
       totalMs += minute * MS_PER_MINUTE;
       totalMs += second * 1000;
+      totalMs += millisecond;
 
       return totalMs;
     })();

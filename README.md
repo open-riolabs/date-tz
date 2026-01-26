@@ -59,24 +59,28 @@ Returns the string representation using the provided format.
 
 #### Format Tokens
 
-| Token      | Meaning         |
-| ---------- | --------------- |
-| YYYY, yyyy | Full year       |
-| YY, yy     | Last 2 digits   |
-| MM         | Month (01–12)   |
-| DD         | Day (01–31)     |
-| HH         | Hour (00–23)    |
-| hh         | Hour (01–12)    |
-| mm         | Minute (00–59)  |
-| ss         | Second (00–59)  |
-| aa, AA     | AM/PM marker    |
-| tz         | Timezone string |
+| Token      | Meaning                          |
+| ---------- | -------------------------------- |
+| YYYY, yyyy | Full year                        |
+| YY, yy     | Last 2 digits                    |
+| MM         | Month (01–12)                    |
+| LM         | Month (Long string in locale)    |
+| LS         | Month (Short string in locale)   |
+| DD         | Day (01–31)                      |
+| WL         | Weekday (Long string in locale)  |
+| WS         | Weekday (Short string in locale) |
+| HH         | Hour 24 (00–23)                  |
+| hh         | Hour 12 (01–12)                  |
+| mm         | Minute (00–59)                   |
+| ss         | Second (00–59)                   |
+| aa, AA     | AM/PM marker                     |
+| tz         | Timezone string                  |
 
-### `add(value: number, unit: 'minute' | 'hour' | 'day' | 'month' | 'year'): this`
+### `add(value: number, unit: 'millisecond' | 'second' | 'minute' | 'hour' | 'day' | 'month' | 'year'): this`
 
 Adds the given time to the instance.
 
-### `set(value: number, unit: 'year' | 'month' | 'day' | 'hour' | 'minute'): this`
+### `set(value: number, unit: 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second' | 'millisecond'): this`
 
 Sets a specific part of the date/time.
 
