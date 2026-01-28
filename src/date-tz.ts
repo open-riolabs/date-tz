@@ -155,8 +155,8 @@ export class DateTz implements IDateTz {
       yyyy: year.toString(),
       yy: String(year).slice(-2),
       MM: String(month + 1).padStart(2, '0'),
-      LM: formatterTzLong.formatToParts(Date.now()).find(o => o.type === 'month').value,
-      SM: formatterTzShort.formatToParts(Date.now()).find(o => o.type === 'month').value,
+      LM: formatterTzLong.formatToParts(this.timestamp).find(o => o.type === 'month').value,
+      SM: formatterTzShort.formatToParts(this.timestamp).find(o => o.type === 'month').value,
       DD: String(day).padStart(2, '0'),
       HH: String(hour).padStart(2, '0'),
       mm: String(minute).padStart(2, '0'),
@@ -165,8 +165,8 @@ export class DateTz implements IDateTz {
       AA: pm,
       hh: hour12.toString().padStart(2, '0'),
       tz: this.timezone,
-      WS: formatterTzShort.formatToParts(Date.now()).find(o => o.type === 'weekday').value,
-      WL: formatterTzLong.formatToParts(Date.now()).find(o => o.type === 'weekday').value
+      WS: formatterTzShort.formatToParts(this.timestamp).find(o => o.type === 'weekday').value,
+      WL: formatterTzLong.formatToParts(this.timestamp).find(o => o.type === 'weekday').value
     };
 
     // Replace pattern tokens with actual values
