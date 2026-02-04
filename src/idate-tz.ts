@@ -91,4 +91,6 @@ export interface IDateTz {
   readonly minuteUTC?: number;
   /** The day of the week (0-6, where 0 is Sunday, UTC). */
   readonly dayOfWeekUTC?: number;
+  /** Checks if the current year is a leap year. */
+  readonly isLeapYear?: boolean;
 }

@@ -101,7 +101,7 @@ export class DateTz implements IDateTz {
 
     // Calculate year
     while (true) {
-      const daysInYear = this.isLeapYear(year) ? 366 : 365;
+      const daysInYear = this._isLeapYear(year) ? 366 : 365;
       const msInYear = daysInYear * MS_PER_DAY;
 
       if (remainingMs >= msInYear) {
@@ -115,7 +115,7 @@ export class DateTz implements IDateTz {
     // Calculate month
     let month = 0;
     while (month < 12) {
-      const daysInMonth = month === 1 && this.isLeapYear(year) ? 29 : daysPerMonth[month];
+      const daysInMonth = month === 1 && this._isLeapYear(year) ? 29 : daysPerMonth[month];
       const msInMonth = daysInMonth * MS_PER_DAY;
 
       if (remainingMs >= msInMonth) {
@@ -201,8 +201,8 @@ export class DateTz implements IDateTz {
 
     // Calculate current month
     let month = 0;
-    while (days >= (month === 1 && this.isLeapYear(year) ? 29 : daysPerMonth[month])) {
-      days -= month === 1 && this.isLeapYear(year) ? 29 : daysPerMonth[month];
+    while (days >= (month === 1 && this._isLeapYear(year) ? 29 : daysPerMonth[month])) {
+      days -= month === 1 && this._isLeapYear(year) ? 29 : daysPerMonth[month];
       month++;
     }
 
@@ -252,8 +252,8 @@ export class DateTz implements IDateTz {
     }
 
     // Normalize day overflow
-    while (day > (month === 1 && this.isLeapYear(year) ? 29 : daysPerMonth[month])) {
-      day -= month === 1 && this.isLeapYear(year) ? 29 : daysPerMonth[month];
+    while (day > (month === 1 && this._isLeapYear(year) ? 29 : daysPerMonth[month])) {
+      day -= month === 1 && this._isLeapYear(year) ? 29 : daysPerMonth[month];
       month++;
       if (month >= 12) {
         month = 0;
@@ -272,7 +272,7 @@ export class DateTz implements IDateTz {
 
       // Add months
       for (let m = 0; m < month; m++) {
-        totalMs += (m === 1 && this.isLeapYear(year) ? 29 : daysPerMonth[m]) * MS_PER_DAY;
+        totalMs += (m === 1 && this._isLeapYear(year) ? 29 : daysPerMonth[m]) * MS_PER_DAY;
       }
 
       // Add days, hours, minutes, and seconds
@@ -379,8 +379,8 @@ export class DateTz implements IDateTz {
 
     // Calculate current month
     let month = 0;
-    while (days >= (month === 1 && this.isLeapYear(year) ? 29 : daysPerMonth[month])) {
-      days -= month === 1 && this.isLeapYear(year) ? 29 : daysPerMonth[month];
+    while (days >= (month === 1 && this._isLeapYear(year) ? 29 : daysPerMonth[month])) {
+      days -= month === 1 && this._isLeapYear(year) ? 29 : daysPerMonth[month];
       month++;
     }
 
@@ -420,8 +420,8 @@ export class DateTz implements IDateTz {
     }
 
     // Normalize day overflow
-    while (day > (month === 1 && this.isLeapYear(year) ? 29 : daysPerMonth[month])) {
-      day -= month === 1 && this.isLeapYear(year) ? 29 : daysPerMonth[month];
+    while (day > (month === 1 && this._isLeapYear(year) ? 29 : daysPerMonth[month])) {
+      day -= month === 1 && this._isLeapYear(year) ? 29 : daysPerMonth[month];
       month++;
       if (month >= 12) {
         month = 0;
@@ -440,7 +440,7 @@ export class DateTz implements IDateTz {
 
       // Add months
       for (let m = 0; m < month; m++) {
-        totalMs += (m === 1 && this.isLeapYear(year) ? 29 : daysPerMonth[m]) * MS_PER_DAY;
+        totalMs += (m === 1 && this._isLeapYear(year) ? 29 : daysPerMonth[m]) * MS_PER_DAY;
       }
 
       // Add days, hours, minutes, and seconds
@@ -556,11 +556,18 @@ export class DateTz implements IDateTz {
   }
 
   /**
+ * Checks if the current year is a leap year.
+ */
+  get isLeapYear(): boolean {
+    return this._isLeapYear(this.year);
+  }
+
+  /**
  * Checks if a given year is a leap year.
  * @param year - The year to check.
  * @returns True if the year is a leap year, otherwise false.
  */
-  private isLeapYear(year: number) {
+  private _isLeapYear(year: number) {
     return (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
   }
 
@@ -570,7 +577,7 @@ export class DateTz implements IDateTz {
    * @returns The number of days in the year.
    */
   private daysInYear(year: number) {
-    return this.isLeapYear(year) ? 366 : 365;
+    return this._isLeapYear(year) ? 366 : 365;
   }
 
   private _year(local?: boolean) {
@@ -597,8 +604,8 @@ export class DateTz implements IDateTz {
     }
 
     let month = 0;
-    while (days >= (month === 1 && this.isLeapYear(year) ? 29 : daysPerMonth[month])) {
-      days -= month === 1 && this.isLeapYear(year) ? 29 : daysPerMonth[month];
+    while (days >= (month === 1 && this._isLeapYear(year) ? 29 : daysPerMonth[month])) {
+      days -= month === 1 && this._isLeapYear(year) ? 29 : daysPerMonth[month];
       month++;
     }
 
@@ -616,8 +623,8 @@ export class DateTz implements IDateTz {
     }
 
     let month = 0;
-    while (days >= (month === 1 && this.isLeapYear(year) ? 29 : daysPerMonth[month])) {
-      days -= month === 1 && this.isLeapYear(year) ? 29 : daysPerMonth[month];
+    while (days >= (month === 1 && this._isLeapYear(year) ? 29 : daysPerMonth[month])) {
+      days -= month === 1 && this._isLeapYear(year) ? 29 : daysPerMonth[month];
       month++;
     }
 
