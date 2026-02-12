@@ -2,8 +2,14 @@ import { canonicalLink, etc } from "./canonical-link";
 
 export function getOffsetSeconds(timestamp: number, timezone: string): number {
   if (timezone === 'UTC') return 0;
+  const baseOffset = tzDiscover(timestamp, timezone).offset;
+  let timestampdiscovery = timestamp - (baseOffset - 60) * 60 * 1000;
+
   const arr: Array<{ offset: number, isDst: boolean; }> = [];
-  for (const time2discover of Array.from({ length: 16 }, (_, i) => timestamp - (8 - i) * 15 * 60 * 1000)) {
+  const interval = 8;
+  timestampdiscovery -= interval * 15 * 60 * 1000;
+
+  for (const time2discover of Array.from({ length: interval * 2 }, (_, i) => timestampdiscovery + i * 15 * 60 * 1000)) {
     arr.push(tzDiscover(time2discover, timezone));
   }
   const first = arr[0];
