@@ -6,7 +6,7 @@ export function getOffsetSeconds(timestamp: number, timezone: string): number {
   let timestampdiscovery = timestamp - (baseOffset - 60) * 60 * 1000;
 
   const arr: Array<{ offset: number, isDst: boolean; }> = [];
-  const interval = 8;
+  const interval = 4;
   timestampdiscovery -= interval * 15 * 60 * 1000;
 
   for (const time2discover of Array.from({ length: interval * 2 }, (_, i) => timestampdiscovery + i * 15 * 60 * 1000)) {
@@ -40,7 +40,7 @@ export function tzDiscover(timestamp: number, timezone: string): { offset: numbe
   const sign = match[1] === '+' ? 1 : -1;
   const hours = parseInt(match[2], 10);
   const mins = match[3] ? parseInt(match[3], 10) : 0;
-  return { isDst, offset: sign * (hours * 60 + mins) };
+  return { isDst, offset: sign * (hours * 60 + mins), hh: `${getTimeFormatPart(partsTZS, 'hour')}:${getTimeFormatPart(partsTZS, 'minute')}` } as any;
 }
 
 function getTimeFormatPart(parts: Intl.DateTimeFormatPart[], type: string) {
