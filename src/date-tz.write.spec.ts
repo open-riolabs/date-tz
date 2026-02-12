@@ -96,8 +96,69 @@ describe('DateTz.now', () => {
   });
 
   it("returns a parsed timestamp in requested timezone", () => {
-    const parsed = DateTz.parse("2025-03-08 21:00:00", "YYYY-MM-DD HH:mm:ss", "America/Toronto");
-    expect(parsed.timezone).toBe('America/Toronto');
-    expect(parsed.timestamp).toBe(1741485600000);
+    const parsed = DateTz.parse("2025-07-01 12:00:00", "YYYY-MM-DD HH:mm:ss", "Pacific/Honolulu");
+    expect(parsed.timezone).toBe('Pacific/Honolulu');
+    expect(parsed.timestamp).toBe(1751407200000);
   });
+
+  it("returns a parsed timestamp in requested timezone", () => {
+    const parsed = DateTz.parse("2025-01-15 08:30:00", "YYYY-MM-DD HH:mm:ss", "Pacific/Auckland");
+    expect(parsed.timezone).toBe('Pacific/Auckland');
+    expect(parsed.timestamp).toBe(1736883000000);
+  });
+
+  it("returns a parsed timestamp in requested timezone", () => {
+    const parsed = DateTz.parse("2025-01-15 08:00:00", "YYYY-MM-DD HH:mm:ss", "Australia/Sydney");
+    expect(parsed.timezone).toBe('Australia/Sydney');
+    expect(parsed.timestamp).toBe(1736888400000);
+  });
+
+  it("returns a parsed timestamp in requested timezone", () => {
+    const parsed = DateTz.parse("2025-01-15 08:00:00", "YYYY-MM-DD HH:mm:ss", "Australia/Perth");
+    expect(parsed.timezone).toBe('Australia/Perth');
+    expect(parsed.timestamp).toBe(1736899200000);
+  });
+
+  it("returns a parsed timestamp in requested timezone", () => {
+    const parsed = DateTz.parse("2025-01-15 08:00:00", "YYYY-MM-DD HH:mm:ss", "Australia/Adelaide");
+    expect(parsed.timezone).toBe('Australia/Adelaide');
+    expect(parsed.timestamp).toBe(1736890200000);
+  });
+
+  it("returns a parsed timestamp in requested timezone", () => {
+    const parsed = DateTz.parse("2025-01-15 12:00:00", "YYYY-MM-DD HH:mm:ss", "Africa/Cairo");
+    expect(parsed.timezone).toBe('Africa/Cairo');
+    expect(parsed.timestamp).toBe(1736935200000);
+  });
+
+  it("returns a parsed timestamp in requested timezone", () => {
+    const parsed = DateTz.parse("2025-04-25 01:00:00", "YYYY-MM-DD HH:mm:ss", "Africa/Cairo");
+    expect(parsed.timezone).toBe('Africa/Cairo');
+    expect(parsed.timestamp).toBe(1745532000000);
+  });
+
+  it("returns a parsed timestamp in requested timezone", () => {
+    const parsed = DateTz.parse("2025-07-15 12:00:00", "YYYY-MM-DD HH:mm:ss", "Africa/Cairo");
+    expect(parsed.timezone).toBe('Africa/Cairo');
+    expect(parsed.timestamp).toBe(1752570000000);
+  });
+
+  it("returns a parsed timestamp in requested timezone", () => {
+    const parsed = DateTz.parse("2025-01-15 12:00:00", "YYYY-MM-DD HH:mm:ss", "Africa/Lagos");
+    expect(parsed.timezone).toBe('Africa/Lagos');
+    expect(parsed.timestamp).toBe(1736938800000);
+  });
+
+  it("returns a parsed timestamp in requested timezone", () => {
+    const parsed = DateTz.parse("2025-06-15 10:20:30", "YYYY-MM-DD HH:mm:ss", "Europe/Berlin");
+    expect(parsed.timezone).toBe('Europe/Berlin');
+    expect(parsed.timestamp).toBe(1749975630000);
+  });
+
+  it("returns a parsed timestamp in requested timezone", () => {
+    const parsed = DateTz.parse("2026-04-04 16:30:00", "YYYY-MM-DD HH:mm:ss", "Pacific/Auckland");
+    expect(parsed.timezone).toBe('Pacific/Auckland');
+    expect(parsed.timestamp).toBe(1775273400000);
+  });
+
 });
