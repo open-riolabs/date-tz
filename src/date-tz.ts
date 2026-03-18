@@ -324,6 +324,33 @@ export class DateTz implements IDateTz {
   }
 
   /**
+ * Sets the timezone of the DateTz instance, recalculating the offset and DST status.
+ * The absolute point in time (UTC timestamp) is preserved.
+ * @param tz - The target timezone identifier (IANA format).
+ * @returns The updated DateTz instance.
+ * @throws Error if the timezone is invalid.
+ */
+  setTimezone(tz: string): IDateTz {
+    if (!tz) throw new Error(`Invalid timezone: ${tz}`);
+    if (tz === 'UTC') tz = 'Etc/UTC';
+    tz = DateTz.fallbackTimeZone(tz);
+    if (!DateTz.isValidTimeZone(tz)) {
+      throw new Error(`Invalid timezone: ${tz}`);
+    }
+
+    this.timezone = tz;
+
+    // Recalculate offset and DST for the current timestamp in the new timezone.
+    // tzDiscover uses Intl internally to resolve the correct UTC offset and DST
+    // flag, so transitions (e.g. CET → CEST) are handled automatically.
+    const tzOffset = tzDiscover(this.timestamp, this.timezone);
+    this._timezoneOffset = tzOffset.offset * 60 * 1000;
+    this._isDst = tzOffset.isDst;
+
+    return this;
+  }
+
+  /**
    * Strips seconds and milliseconds from the timestamp.
    * @param timestamp - The original timestamp.
    * @returns The timestamp without seconds and milliseconds.
@@ -344,12 +371,12 @@ export class DateTz implements IDateTz {
   }
 
   /**
- * Sets a specific component of the date or time.
- * @param value - The value to set.
- * @param unit - The unit to set ('year', 'month', 'day', 'hour', 'minute').
- * @returns The updated DateTz instance.
- * @throws Error if the unit is unsupported.
- */
+  * Sets a specific component of the date or time.
+  * @param value - The value to set.
+  * @param unit - The unit to set ('year', 'month', 'day', 'hour', 'minute').
+  * @returns The updated DateTz instance.
+  * @throws Error if the unit is unsupported.
+  */
   set(value: number, unit: 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second' | 'millisecond') {
 
     if (unit === 'month' && (value < 1 || value > 12)) throw new Error(`Invalid month: ${value}`);

@@ -58,6 +58,15 @@ export interface IDateTz {
   convertToTimezone?(tz: string): IDateTz;
 
   /**
+ * Sets the timezone of the DateTz instance, recalculating the offset and DST status.
+ * The absolute point in time (UTC timestamp) is preserved.
+ * @param tz - The target timezone identifier (IANA format).
+ * @returns The updated DateTz instance.
+ * @throws Error if the timezone is invalid.
+ */
+  setTimezone(tz: string): IDateTz;
+
+  /**
  * Strips seconds and milliseconds from the timestamp.
  * @param timestamp - The original timestamp.
  * @returns The timestamp without seconds and milliseconds.
