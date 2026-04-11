@@ -170,7 +170,7 @@ export class DateTz implements IDateTz {
     };
 
     // Replace pattern tokens with actual values
-    return pattern.replace(/YYYY|yyyy|YY|yy|MM|LM|DD|HH|hh|mm|ss|aa|AA|tz/g, (match) => tokens[match]);
+    return pattern.replace(/YYYY|yyyy|YY|yy|MM|LM|SM|DD|HH|hh|mm|ss|aa|AA|WS|WL|tz/g, (match) => tokens[match]);
   }
 
   /**
@@ -290,37 +290,52 @@ export class DateTz implements IDateTz {
   }
 
   /**
- * Converts the DateTz instance to a different timezone.
+ * Converts the DateTz instance to a different timezone in place.
+ * The absolute instant (UTC timestamp) is preserved; only the display zone
+ * changes. Offset and DST state are recomputed for the new zone.
  * @param tz - The target timezone identifier.
  * @returns The updated DateTz instance.
  * @throws Error if the timezone is invalid.
  */
-  convertToTimezone(tz: string) {
-    if (tz === 'UTC') tz = 'Etc/UTC';
-    tz = DateTz.fallbackTimeZone(tz);
-    if (!DateTz.isValidTimeZone(tz)) {
-      throw new Error(`Invalid timezone: ${tz}`);
-    }
-    this.timezone = tz;
-    return this;
+  convertToTimezone(tz: string): IDateTz {
+    return this.setTimezone(tz);
   }
 
   /**
-   * Clones the DateTz instance to a different timezone.
+   * Clones the DateTz instance into a different timezone.
+   * The clone represents the same absolute instant, displayed in the target
+   * zone with correctly recomputed offset and DST state.
    * @param tz - The target timezone identifier.
    * @returns A new DateTz instance in the target timezone.
    * @throws Error if the timezone is invalid.
    */
-  cloneToTimezone(tz: string) {
+  cloneToTimezone(tz: string): DateTz {
     if (!tz) throw new Error(`Invalid timezone: ${tz}`);
     if (tz === 'UTC') tz = 'Etc/UTC';
     tz = DateTz.fallbackTimeZone(tz);
     if (!DateTz.isValidTimeZone(tz)) {
       throw new Error(`Invalid timezone: ${tz}`);
     }
-    const clone = new DateTz(this);
-    clone.timezone = tz;
-    return clone;
+    // Construct directly in the target zone so the constructor computes
+    // the right _timezoneOffset / _isDst from the start.
+    return new DateTz(this.timestamp, tz);
+  }
+
+  /**
+   * Returns a new DateTz showing the same instant in the given timezone.
+   *
+   * Use case: a message is saved with its sender's timezone (e.g. sent at
+   * 08:00 in Europe/Rome) and later read by a user in another timezone
+   * (e.g. Asia/Tokyo). `readIn('Asia/Tokyo')` yields a DateTz whose
+   * `toString()` renders the instant as the Tokyo reader experienced it
+   * (15:00 or 16:00 depending on DST), without mutating the original.
+   *
+   * @param tz - The reader's timezone identifier.
+   * @returns A new DateTz at the same instant, displayed in `tz`.
+   * @throws Error if the timezone is invalid.
+   */
+  readIn(tz: string): DateTz {
+    return this.cloneToTimezone(tz);
   }
 
   /**
@@ -673,9 +688,12 @@ export class DateTz implements IDateTz {
   }
 
   private _dayOfWeek(local?: boolean) {
+    // remainingMs is the instant shifted into the target (or UTC) wall clock,
+    // so the UTC day-of-week of that shifted value is the answer. Using
+    // getDay() here would leak the runtime's local timezone into the result.
     let remainingMs = this.timestamp + (local ? this.timezoneOffset : 0);
     const date = new Date(remainingMs);
-    return date.getDay();
+    return date.getUTCDay();
   }
 
   private static _supportedTimezones: string[];
@@ -715,21 +733,27 @@ export class DateTz implements IDateTz {
     };
 
     let match: RegExpExecArray | null;
-    let index = 0;
     while ((match = regex.exec(pattern)) !== null) {
       const token = match[0];
-      const value = parseInt(dateString.substring(match.index, match.index + token.length), 10);
-      dateComponents[token] = value;
-      index += token.length + 1;
+      if (token === 'aa' || token === 'AA') {
+        dateComponents[token] = dateString.substring(match.index, match.index + token.length);
+      } else {
+        const value = parseInt(dateString.substring(match.index, match.index + token.length), 10);
+        dateComponents[token] = value;
+      }
     }
 
     const year = (dateComponents.YYYY as number) || (dateComponents.yyyy as number);
     const month = (dateComponents.MM as number) - 1; // Months are zero-based
     const day = dateComponents.DD as number;
     let hour = 0;
-    const ampm = (dateComponents.a || dateComponents.A) as string;
-    if (ampm) {
-      hour = ampm.toUpperCase() === 'AM' ? (dateComponents.hh as number) : (dateComponents.hh as number) + 12;
+    const ampm = (dateComponents.aa || dateComponents.AA) as string;
+    if (pattern.includes('hh')) {
+      const hh12 = dateComponents.hh as number;
+      const isPm = ampm && ampm.toUpperCase() === 'PM';
+      // 12 AM -> 0, 12 PM -> 12, otherwise hh or hh+12
+      if (hh12 === 12) hour = isPm ? 12 : 0;
+      else hour = isPm ? hh12 + 12 : hh12;
     } else {
       hour = dateComponents.HH as number;
     }

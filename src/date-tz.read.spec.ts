@@ -57,3 +57,44 @@ describe('DateTz.toString formatting', () => {
   });
 
 });
+
+describe('DateTz cross-timezone read (sender/reader use case)', () => {
+  // A message sent at 08:00 on 2026-01-15 in Europe/Rome (CET, UTC+1)
+  // is the instant 07:00 UTC. A reader in Asia/Tokyo (JST, UTC+9) should
+  // see it as 16:00 on the same calendar day.
+  const italianMorning = DateTz.parse('2026-01-15 08:00:00', 'YYYY-MM-DD HH:mm:ss', 'Europe/Rome');
+
+  it('readIn renders the reader\'s wall clock without mutating the sender instance', () => {
+    const forTokyo = italianMorning.readIn('Asia/Tokyo');
+    expect(forTokyo.toString()).toBe('2026-01-15 16:00:00');
+    // original is untouched
+    expect(italianMorning.toString()).toBe('2026-01-15 08:00:00');
+    expect(italianMorning.timezone).toBe('Europe/Rome');
+  });
+
+  it('readIn preserves the absolute instant (timestamp)', () => {
+    const forTokyo = italianMorning.readIn('Asia/Tokyo');
+    expect(forTokyo.timestamp).toBe(italianMorning.timestamp);
+  });
+
+  it('cloneToTimezone recomputes offset and getters for the new zone', () => {
+    const clone = italianMorning.cloneToTimezone('Asia/Tokyo');
+    expect(clone.hour).toBe(16);
+    expect(clone.day).toBe(15);
+    expect(clone.month).toBe(0); // January, zero-based
+  });
+
+  it('convertToTimezone mutates in place and recomputes offset', () => {
+    const d = DateTz.parse('2026-01-15 08:00:00', 'YYYY-MM-DD HH:mm:ss', 'Europe/Rome');
+    d.convertToTimezone!('Asia/Tokyo');
+    expect(d.timezone).toBe('Asia/Tokyo');
+    expect(d.toString!()).toBe('2026-01-15 16:00:00');
+    expect(d.hour).toBe(16);
+  });
+
+  it('readIn handles DST: summer Rome -> Tokyo (no DST in Japan)', () => {
+    // 08:00 CEST on 2026-07-15 is 06:00 UTC, which is 15:00 JST.
+    const summerMorning = DateTz.parse('2026-07-15 08:00:00', 'YYYY-MM-DD HH:mm:ss', 'Europe/Rome');
+    expect(summerMorning.readIn('Asia/Tokyo').toString()).toBe('2026-07-15 15:00:00');
+  });
+});
