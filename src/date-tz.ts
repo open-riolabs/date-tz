@@ -290,18 +290,6 @@ export class DateTz implements IDateTz {
   }
 
   /**
- * Converts the DateTz instance to a different timezone in place.
- * The absolute instant (UTC timestamp) is preserved; only the display zone
- * changes. Offset and DST state are recomputed for the new zone.
- * @param tz - The target timezone identifier.
- * @returns The updated DateTz instance.
- * @throws Error if the timezone is invalid.
- */
-  convertToTimezone(tz: string): IDateTz {
-    return this.setTimezone(tz);
-  }
-
-  /**
    * Clones the DateTz instance into a different timezone.
    * The clone represents the same absolute instant, displayed in the target
    * zone with correctly recomputed offset and DST state.
@@ -319,23 +307,6 @@ export class DateTz implements IDateTz {
     // Construct directly in the target zone so the constructor computes
     // the right _timezoneOffset / _isDst from the start.
     return new DateTz(this.timestamp, tz);
-  }
-
-  /**
-   * Returns a new DateTz showing the same instant in the given timezone.
-   *
-   * Use case: a message is saved with its sender's timezone (e.g. sent at
-   * 08:00 in Europe/Rome) and later read by a user in another timezone
-   * (e.g. Asia/Tokyo). `readIn('Asia/Tokyo')` yields a DateTz whose
-   * `toString()` renders the instant as the Tokyo reader experienced it
-   * (15:00 or 16:00 depending on DST), without mutating the original.
-   *
-   * @param tz - The reader's timezone identifier.
-   * @returns A new DateTz at the same instant, displayed in `tz`.
-   * @throws Error if the timezone is invalid.
-   */
-  readIn(tz: string): DateTz {
-    return this.cloneToTimezone(tz);
   }
 
   /**

@@ -51,22 +51,6 @@ export interface IDateTz {
   cloneToTimezone?(tz: string): IDateTz;
   /** Indicates if the date is in daylight saving time. */
 
-  /** Converts the date to a different timezone.
-   * @param tz The target timezone identifier.
-   * @returns A new IDateTz in the specified timezone.
-   */
-  convertToTimezone?(tz: string): IDateTz;
-
-  /**
-   * Returns a new IDateTz showing the same instant as viewed from the
-   * given reader timezone. Use case: a message saved with its sender's
-   * timezone should render to a reader as the local wall-clock time that
-   * the reader experienced when the message arrived.
-   * @param tz The reader's timezone identifier.
-   * @returns A new IDateTz at the same instant, displayed in `tz`.
-   */
-  readIn?(tz: string): IDateTz;
-
   /**
  * Sets the timezone of the DateTz instance, recalculating the offset and DST status.
  * The absolute point in time (UTC timestamp) is preserved.
