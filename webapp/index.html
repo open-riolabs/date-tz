@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DateTz Playground</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">DT</span>
+      <div>
+        <h1>DateTz Playground</h1>
+        <p class="tag">A live test bench for <code>@open-rlb/date-tz</code></p>
+      </div>
+    </div>
+    <nav class="nav">
+      <a href="#clock">World Clock</a>
+      <a href="#timestamp">Timestamp</a>
+      <a href="#parse">Parse</a>
+      <a href="#format">Format</a>
+      <a href="#convert">Convert</a>
+      <a href="#manipulate">Manipulate</a>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ──────────────── WORLD CLOCK ──────────────── -->
+    <section id="clock" class="card">
+      <header class="card-head">
+        <h2>World Clock</h2>
+        <p>Live times across the globe, rendered with <code>DateTz.now(tz).toString()</code>. Updated every second.</p>
+      </header>
+
+      <div class="now-big" id="nowBig">
+        <div>
+          <div class="big-label">Your local time</div>
+          <div class="big-date" id="bigDate">—</div>
+          <div class="big-meta" id="bigMeta">—</div>
+        </div>
+        <div>
+          <div class="big-label">Unix timestamp (ms)</div>
+          <div class="big-ts" id="bigTs">—</div>
+          <div class="big-meta" id="bigTsSec">—</div>
+        </div>
+      </div>
+
+      <div class="clock-controls">
+        <input id="clockFilter" type="search" placeholder="Filter cities (e.g. Rome, Tokyo, America)" />
+        <button id="clockAdd" class="ghost">+ Add timezone</button>
+      </div>
+
+      <div class="grid" id="clockGrid"></div>
+    </section>
+
+    <!-- ──────────────── TIMESTAMP ──────────────── -->
+    <section id="timestamp" class="card">
+      <header class="card-head">
+        <h2>Timestamp → DateTz</h2>
+        <p>Build a <code>DateTz</code> from a Unix timestamp and inspect every getter.</p>
+      </header>
+
+      <div class="form-row">
+        <label>
+          <span>Timestamp</span>
+          <input id="tsInput" type="number" value="" />
+        </label>
+        <label>
+          <span>Unit</span>
+          <select id="tsUnit">
+            <option value="ms" selected>Milliseconds</option>
+            <option value="s">Seconds</option>
+          </select>
+        </label>
+        <label>
+          <span>Timezone</span>
+          <input id="tsTz" list="tzList" value="Europe/Rome" />
+        </label>
+        <button id="tsNowBtn" class="primary">Use now</button>
+      </div>
+
+      <div class="result" id="tsResult"></div>
+    </section>
+
+    <!-- ──────────────── PARSE ──────────────── -->
+    <section id="parse" class="card">
+      <header class="card-head">
+        <h2>Parse string → DateTz</h2>
+        <p>Invokes <code>DateTz.parse(dateString, pattern, tz)</code>.</p>
+      </header>
+
+      <div class="form-row">
+        <label class="grow">
+          <span>Date string</span>
+          <input id="parseStr" value="2026-01-15 08:00:00" />
+        </label>
+        <label class="grow">
+          <span>Pattern</span>
+          <input id="parsePattern" value="YYYY-MM-DD HH:mm:ss" />
+        </label>
+        <label>
+          <span>Timezone</span>
+          <input id="parseTz" list="tzList" value="Europe/Rome" />
+        </label>
+      </div>
+
+      <div class="result" id="parseResult"></div>
+    </section>
+
+    <!-- ──────────────── FORMAT ──────────────── -->
+    <section id="format" class="card">
+      <header class="card-head">
+        <h2>Format DateTz → string</h2>
+        <p>Calls <code>date.toString(pattern, locale)</code>. Experiment with the full token set.</p>
+      </header>
+
+      <div class="form-row">
+        <label>
+          <span>Timestamp (ms)</span>
+          <input id="fmtTs" type="number" />
+        </label>
+        <label>
+          <span>Timezone</span>
+          <input id="fmtTz" list="tzList" value="Europe/Rome" />
+        </label>
+        <label class="grow">
+          <span>Pattern</span>
+          <input id="fmtPattern" value="WL DD LM YYYY HH:mm tz" />
+        </label>
+        <label>
+          <span>Locale</span>
+          <input id="fmtLocale" value="en" />
+        </label>
+      </div>
+
+      <div class="result" id="fmtResult"></div>
+
+      <details class="tokens">
+        <summary>Format tokens reference</summary>
+        <table>
+          <thead><tr><th>Token</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>YYYY</code> / <code>yyyy</code></td><td>Full year</td></tr>
+            <tr><td><code>YY</code> / <code>yy</code></td><td>2-digit year</td></tr>
+            <tr><td><code>MM</code></td><td>Month 01–12</td></tr>
+            <tr><td><code>LM</code></td><td>Long month name (locale)</td></tr>
+            <tr><td><code>SM</code></td><td>Short month name (locale)</td></tr>
+            <tr><td><code>DD</code></td><td>Day of month 01–31</td></tr>
+            <tr><td><code>HH</code></td><td>Hour 00–23</td></tr>
+            <tr><td><code>hh</code></td><td>Hour 01–12 (needs <code>aa</code>/<code>AA</code>)</td></tr>
+            <tr><td><code>mm</code></td><td>Minute</td></tr>
+            <tr><td><code>ss</code></td><td>Second</td></tr>
+            <tr><td><code>aa</code> / <code>AA</code></td><td>am/pm — AM/PM</td></tr>
+            <tr><td><code>WL</code></td><td>Long weekday name</td></tr>
+            <tr><td><code>WS</code></td><td>Short weekday name</td></tr>
+            <tr><td><code>tz</code></td><td>Timezone identifier</td></tr>
+          </tbody>
+        </table>
+      </details>
+    </section>
+
+    <!-- ──────────────── CONVERT ──────────────── -->
+    <section id="convert" class="card">
+      <header class="card-head">
+        <h2>Cross-timezone view (<code>readIn</code>)</h2>
+        <p>One absolute instant, experienced by readers in different timezones.</p>
+      </header>
+
+      <div class="form-row">
+        <label class="grow">
+          <span>Source date string</span>
+          <input id="convSrc" value="2026-01-15 08:00:00" />
+        </label>
+        <label>
+          <span>Source pattern</span>
+          <input id="convPattern" value="YYYY-MM-DD HH:mm:ss" />
+        </label>
+        <label>
+          <span>Source timezone</span>
+          <input id="convTz" list="tzList" value="Europe/Rome" />
+        </label>
+      </div>
+
+      <div class="form-row">
+        <label class="grow">
+          <span>Target timezones (comma separated)</span>
+          <input id="convTargets" value="Asia/Tokyo, America/New_York, America/Los_Angeles, Australia/Sydney, Etc/UTC" />
+        </label>
+      </div>
+
+      <div class="result" id="convResult"></div>
+    </section>
+
+    <!-- ──────────────── MANIPULATE ──────────────── -->
+    <section id="manipulate" class="card">
+      <header class="card-head">
+        <h2>Manipulate</h2>
+        <p>Chain <code>add</code> / <code>set</code> operations and watch the timestamp evolve.</p>
+      </header>
+
+      <div class="form-row">
+        <label class="grow">
+          <span>Base date string</span>
+          <input id="manSrc" value="2026-01-15 08:00:00" />
+        </label>
+        <label>
+          <span>Pattern</span>
+          <input id="manPattern" value="YYYY-MM-DD HH:mm:ss" />
+        </label>
+        <label>
+          <span>Timezone</span>
+          <input id="manTz" list="tzList" value="Europe/Rome" />
+        </label>
+        <button id="manReset" class="ghost">Reset</button>
+      </div>
+
+      <div class="manip-bar">
+        <select id="manOp">
+          <option value="add">add(value, unit)</option>
+          <option value="set">set(value, unit)</option>
+          <option value="stripSecMillis">stripSecMillis()</option>
+          <option value="setTimezone">setTimezone(tz) — in place</option>
+          <option value="cloneToTimezone">cloneToTimezone(tz) — new instance</option>
+        </select>
+        <input id="manValue" type="number" value="1" />
+        <select id="manUnit">
+          <option value="year">year</option>
+          <option value="month">month</option>
+          <option value="day">day</option>
+          <option value="hour" selected>hour</option>
+          <option value="minute">minute</option>
+          <option value="second">second</option>
+          <option value="millisecond">millisecond</option>
+        </select>
+        <input id="manTzArg" list="tzList" placeholder="tz argument" value="Asia/Tokyo" />
+        <button id="manApply" class="primary">Apply</button>
+      </div>
+
+      <div class="result" id="manResult"></div>
+      <ol class="history" id="manHistory"></ol>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>
+      Built with <code>DateTz</code> · source in
+      <a href="https://github.com/open-riolabs/date-tz" target="_blank" rel="noopener">open-riolabs/date-tz</a>
+    </p>
+  </footer>
+
+  <datalist id="tzList"></datalist>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

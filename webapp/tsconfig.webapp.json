@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "module": "es2022",
+    "moduleResolution": "node",
+    "target": "es2022",
+    "lib": ["ES2022", "ES2022.Intl", "DOM"],
+    "declaration": false,
+    "removeComments": true,
+    "sourceMap": false,
+    "outDir": "./lib",
+    "rootDir": "../src",
+    "skipLibCheck": true,
+    "strictNullChecks": false,
+    "noImplicitAny": false,
+    "strictBindCallApply": false,
+    "forceConsistentCasingInFileNames": false,
+    "noFallthroughCasesInSwitch": false,
+    "strict": false
+  },
+  "include": ["../src/**/*.ts"],
+  "exclude": ["../src/**/*.spec.ts"]
+}

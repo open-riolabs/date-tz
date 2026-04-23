@@ -7,7 +7,9 @@
   "types": "index.d.ts",
   "scripts": {
     "build": "tsc",
-    "test": "tsc -p tsconfig.test.json && jest"
+    "test": "tsc -p tsconfig.test.json && jest",
+    "webapp:build": "node webapp/build.mjs",
+    "webapp:serve": "node webapp/serve.mjs"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",

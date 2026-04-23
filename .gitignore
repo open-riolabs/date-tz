@@ -143,3 +143,6 @@ dist
 
 # End of https://www.toptal.com/developers/gitignore/api/node
 .claude
+
+# DateTz Playground build output
+webapp/lib/
