@@ -142,7 +142,8 @@ dist
 .svelte-kit
 
 # End of https://www.toptal.com/developers/gitignore/api/node
-.claude
+.claude/*.local.json
+!.claude/commands/*
 
 # DateTz Playground build output
 webapp/lib/
