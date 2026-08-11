@@ -279,6 +279,35 @@ Returns the canonical IANA timezone identifiers supported by the runtime.
 
 ---
 
+## Serialisation
+
+Instances carry their state in ECMAScript private fields, so nothing leaks into the wire format under an internal name. `JSON.stringify` uses `toJSON()`, which emits exactly what the constructor reads back:
+
+```ts
+const d = new DateTz(1786621500000, 'Europe/Rome');
+
+JSON.stringify(d);
+// {"timestamp":1786621500000,"timezone":"Europe/Rome"}
+
+const back = new DateTz(JSON.parse(JSON.stringify(d)));
+back.toString();   // '2026-08-13 13:45:00'
+```
+
+This holds when instances are nested inside a larger payload, which is the usual case for a message queue or an HTTP body:
+
+```ts
+JSON.stringify({ bookingId: 42, start: d });
+// {"bookingId":42,"start":{"timestamp":1786621500000,"timezone":"Europe/Rome"}}
+```
+
+`timezoneOffset` and `isDst` are deliberately **not** serialised. They are derived from the instant and the zone, and the receiving side resolves them against its own [timezone data](#timezone-data) rather than trusting numbers computed elsewhere, possibly by a runtime with an older copy of the database.
+
+> **Transports that bypass `toJSON`.** `structuredClone`, object spread and `Object.assign` copy enumerable own properties and do not consult `toJSON`, so they see an empty object. Call `date.toJSON()` explicitly when the value crosses one of those.
+
+> **Fixed in 1.x.** Two state fields were briefly declared as TypeScript `private`, which is erased at compile time: the properties stayed enumerable at runtime under `_timestamp` and `_timezone`, so a serialised instance no longer had the names the constructor reads and rebuilding one threw `Invalid timestamp: undefined`.
+
+---
+
 ## Timezone data
 
 UTC offsets come from **the runtime's own copy of the IANA timezone database**, read through `Intl`. The library ships no zone data of its own, which keeps it dependency-free and as current as the host — but it also means the answer depends on the host, not on the version of this package.
