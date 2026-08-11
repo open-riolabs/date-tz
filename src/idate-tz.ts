@@ -35,14 +35,14 @@ export interface IDateTz {
    * @param unit The unit of time.
    * @returns A new IDateTz with the added value.
    */
-  add?(value: number, unit: 'minute' | 'hour' | 'day' | 'month' | 'year'): IDateTz;
+  add?(value: number, unit: 'millisecond' | 'second' | 'minute' | 'hour' | 'day' | 'month' | 'year'): IDateTz;
   /**
    * Sets the specified unit of time to a value.
    * @param value The value to set.
    * @param unit The unit of time.
    * @returns A new IDateTz with the set value.
    */
-  set?(value: number, unit: 'year' | 'month' | 'day' | 'hour' | 'minute'): IDateTz;
+  set?(value: number, unit: 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second' | 'millisecond'): IDateTz;
   /**
    * Clones the date to a different timezone.
    * @param tz The target timezone identifier.
@@ -58,7 +58,7 @@ export interface IDateTz {
  * @returns The updated DateTz instance.
  * @throws Error if the timezone is invalid.
  */
-  setTimezone(tz: string): IDateTz;
+  setTimezone?(tz: string): IDateTz;
 
   /**
  * Strips seconds and milliseconds from the timestamp.
@@ -66,13 +66,13 @@ export interface IDateTz {
  * @returns The timestamp without seconds and milliseconds.
  */
   stripSecMillis?(): IDateTz;
-  /** The timezone offset information. */
+  /** The timezone offset from UTC, in milliseconds. */
   readonly timezoneOffset?: number;
   /** Indicates if the date is in daylight saving time. */
   readonly isDst?: boolean;
   /** The year component of the date. */
   readonly year?: number;
-  /** The month component of the date (1-12). */
+  /** The month component of the date (zero-based, 0 = January). */
   readonly month?: number;
   /** The day component of the date (1-31). */
   readonly day?: number;
@@ -84,7 +84,7 @@ export interface IDateTz {
   readonly dayOfWeek?: number;
   /** The year component of the date (UTC). */
   readonly yearUTC?: number;
-  /** The month component of the date (1-12, UTC). */
+  /** The month component of the date (zero-based, 0 = January, UTC). */
   readonly monthUTC?: number;
   /** The day component of the date (1-31, UTC). */
   readonly dayUTC?: number;

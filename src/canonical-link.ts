@@ -110,7 +110,7 @@ export const canonicalLink = {
   "Asia/Dacca": "Asia/Dhaka",
   "Asia/Harbin": "Asia/Shanghai",
   "Asia/Istanbul": "Europe/Istanbul",
-  "Asia/Kashgar": "Asia/Urumqi[note",
+  "Asia/Kashgar": "Asia/Urumqi",
   "Asia/Katmandu": "Asia/Kathmandu",
   "Asia/Kuala_Lumpur": "Asia/Singapore",
   "Asia/Kuwait": "Asia/Riyadh",

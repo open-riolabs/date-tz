@@ -21,9 +21,17 @@ new DateTz(value: number, tz?: string)
 
 Accepts either an existing `IDateTz` object or a Unix timestamp (milliseconds) with an optional IANA timezone string. Defaults to `Etc/UTC` when no timezone is provided. Throws if the timezone is invalid.
 
+Deprecated identifiers are resolved to the name the runtime supports, so `new DateTz(ts, 'US/Eastern')` and `DateTz.now('US/Eastern')` both report `America/New_York` and remain comparable.
+
+### Supported range
+
+`DateTz` models instants from **1970-01-01T00:00:00Z onwards**. Anything earlier — a negative timestamp, an `add`/`set` that lands before the epoch, or a local wall clock that falls before it in a negative-offset zone — throws rather than returning a nonsensical date.
+
 ---
 
 ## Instance Properties
+
+Both properties are writable; assigning to either re-resolves `timezoneOffset` and `isDst` for the resulting instant.
 
 | Property    | Type     | Description                                      |
 | ----------- | -------- | ------------------------------------------------ |
@@ -116,9 +124,9 @@ Returns `true` if both instances share the same timezone.
 
 ## Timezone conversion
 
-All three methods below preserve the absolute instant — only the display zone changes. The UTC timestamp is never altered.
+Both methods below preserve the absolute instant — only the display zone changes. The UTC timestamp is never altered.
 
-### `readIn(tz: string): DateTz`
+### `cloneToTimezone(tz: string): DateTz`
 
 Returns a **new** `DateTz` showing the same instant as experienced by a reader in `tz`. The original instance is not mutated.
 
@@ -129,7 +137,7 @@ Returns a **new** `DateTz` showing the same instant as experienced by a reader i
 const sent = DateTz.parse('2026-01-15 08:00:00', 'YYYY-MM-DD HH:mm:ss', 'Europe/Rome');
 
 // What does the Tokyo reader (JST, UTC+9) see?
-const forTokyo = sent.readIn('Asia/Tokyo');
+const forTokyo = sent.cloneToTimezone('Asia/Tokyo');
 forTokyo.toString();   // '2026-01-15 16:00:00'
 sent.toString();       // '2026-01-15 08:00:00'  ← original unchanged
 ```
@@ -139,22 +147,14 @@ Works correctly across DST transitions:
 ```ts
 // 08:00 CEST on a summer day is UTC+2 → Tokyo sees 15:00
 const summer = DateTz.parse('2026-07-15 08:00:00', 'YYYY-MM-DD HH:mm:ss', 'Europe/Rome');
-summer.readIn('Asia/Tokyo').toString(); // '2026-07-15 15:00:00'
+summer.cloneToTimezone('Asia/Tokyo').toString(); // '2026-07-15 15:00:00'
 ```
 
 ---
 
-### `cloneToTimezone(tz: string): DateTz`
-
-Same as `readIn` — returns a new instance in `tz` without mutating the original.
-
-### `convertToTimezone(tz: string): this`
-
-Converts the instance **in place** to the target timezone. Offset and DST are recomputed.
-
 ### `setTimezone(tz: string): this`
 
-Low-level in-place zone change with offset/DST recomputation. `convertToTimezone` delegates to this.
+Changes the display zone **in place**, recomputing offset and DST. Equivalent to assigning to `timezone`.
 
 ---
 
@@ -166,6 +166,23 @@ Parses a string to a `DateTz` instance. Pattern defaults to `YYYY-MM-DD HH:mm:ss
 
 ```ts
 const d = DateTz.parse('2025-11-06 11:05:00 PM', 'YYYY-MM-DD hh:mm:ss AA', 'America/New_York');
+```
+
+#### DST transitions
+
+A DST transition can leave a wall-clock time **ambiguous** (it happens twice, when clocks go back) or **non-existent** (it is skipped, when clocks go forward). Both resolve with the offset in effect *before* the transition — the same convention as Temporal's `compatible` disambiguation, Luxon and `java.time`. The rule holds in every zone, whichever side of UTC it sits on.
+
+```ts
+// Skipped: 02:30 does not exist, so it shifts forward by the size of the gap
+DateTz.parse('2025-03-30 02:30:00', 'YYYY-MM-DD HH:mm:ss', 'Europe/Rome').toString();
+// '2025-03-30 03:30:00'
+DateTz.parse('2025-03-09 02:30:00', 'YYYY-MM-DD HH:mm:ss', 'America/New_York').toString();
+// '2025-03-09 03:30:00'
+
+// Ambiguous: 02:30 happens twice, and the first occurrence wins
+const first = DateTz.parse('2025-10-26 02:30:00', 'YYYY-MM-DD HH:mm:ss', 'Europe/Rome');
+first.isDst;       // true  — 02:30 CEST, not the later 02:30 CET
+first.toString();  // '2025-10-26 02:30:00'
 ```
 
 ### `DateTz.now(tz?: string): DateTz`
@@ -197,6 +214,9 @@ Returns the canonical IANA timezone identifiers supported by the runtime.
 | Invalid or unknown timezone                     | Throws `Error`   |
 | Comparing two instances with different timezones | Throws `Error`  |
 | 12-hour pattern (`hh`) without `aa`/`AA`        | Throws `Error`   |
+| Instant before 1970-01-01, in UTC or local time | Throws `Error`   |
+| Non-finite `timestamp`, or non-finite `add` amount | Throws `Error` |
+| Ambiguous or skipped wall clock at a DST transition | Resolved with the pre-transition offset (see above) |
 
 ---
 
@@ -219,7 +239,7 @@ meeting.toString(); // '2025-06-15 12:50:30'
 
 // Cross-timezone read — sender in Rome, reader in Tokyo
 const msg = DateTz.parse('2026-01-15 08:00:00', 'YYYY-MM-DD HH:mm:ss', 'Europe/Rome');
-msg.readIn('Asia/Tokyo').toString(); // '2026-01-15 16:00:00'
+msg.cloneToTimezone('Asia/Tokyo').toString(); // '2026-01-15 16:00:00'
 
 // Current time in Los Angeles
 const now = DateTz.now('America/Los_Angeles');
