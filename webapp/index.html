@@ -165,8 +165,11 @@
         <p class="note">
           Month names need the locale they were written in, which <code>parse</code> is not given,
           so it throws rather than guess at a language — use <code>MM</code> for anything you
-          intend to read back. <code>parse</code> requires the whole string to match the whole
-          pattern: separators are literal, numbers must be padded, trailing text is rejected.
+          intend to read back. <code>parse</code> matches the string from its first character:
+          separators are literal and numbers must be padded, but anything past the last token is
+          ignored, so an ISO value like <code>2026-08-13T13:45:30.123Z</code> reads fine against
+          <code>YYYY-MM-DD HH:mm:ss</code>. The <code>T</code> and a space are interchangeable as
+          the date/time separator; a zone suffix is skipped, not honoured.
         </p>
       </details>
     </section>

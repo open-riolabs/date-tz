@@ -208,16 +208,37 @@ Parses a string to a `DateTz` instance. Pattern defaults to `YYYY-MM-DD HH:mm:ss
 const d = DateTz.parse('2025-11-06 11:05:00 PM', 'YYYY-MM-DD hh:mm:ss AA', 'America/New_York');
 ```
 
-The whole string must match the whole pattern: separators are compared literally, numeric components must carry their padding, and trailing text is rejected. A string that does not fit throws, naming the pattern it failed against.
+The string must match the pattern from its first character on: separators are compared literally and numeric components must carry their padding. A string that does not fit throws, naming the pattern it failed against.
 
 ```ts
 DateTz.parse('2026-06-22', 'YYYY/MM/DD');   // throws: does not match pattern "YYYY/MM/DD"
 DateTz.parse('26-6-2', 'YYYY-MM-DD');       // throws: unpadded components
+DateTz.parse('2026-08-13T13:45', 'YYYY-MM-DD HH:mm:ss');  // throws: no seconds to read
 ```
+
+The pattern states what to **read**, not everything the string is allowed to carry, so anything past the last token is ignored. That is what lets an ISO 8601 value parse against a pattern that stops at the second:
+
+```ts
+DateTz.parse('2026-08-13T13:45:30.123Z', 'YYYY-MM-DD HH:mm:ss');      // 2026-08-13 13:45:30
+DateTz.parse('2026-08-13T13:45:30+02:00', 'YYYY-MM-DD HH:mm:ss');     // 2026-08-13 13:45:30
+DateTz.parse('2026-08-13T13:45', 'YYYY-MM-DD');                        // 2026-08-13 00:00:00
+```
+
+A zone suffix is **skipped, not honoured**: the resulting instant is the wall clock read in the timezone passed to `parse`, exactly as the `tz` token behaves. Pass the offset's zone as the third argument if you need it respected.
+
+**One exception:** the break between date and time is `T` in ISO 8601 and a space in RFC 3339 §5.6, which are the same separator written two ways. A pattern using either accepts both, so the value an HTML `datetime-local` input produces parses against the pattern you would naturally write:
+
+```ts
+DateTz.parse('2026-08-13T13:45', 'YYYY-MM-DD HH:mm');   // ok
+DateTz.parse('2026-08-13 13:45', 'YYYY-MM-DDTHH:mm');   // ok
+DateTz.parse('2026-08-13X13:45', 'YYYY-MM-DD HH:mm');   // throws — only T and space
+```
+
+A `T` inside a longer literal (`GMT`) stays part of that text.
 
 Components the pattern omits fall back to their floor — year `1970`, month and day `01`, everything else `0` — so a partial pattern parses rather than failing.
 
-> **Changed in 1.x.** `parse` used to read each component at the offset its token sat at in the pattern, which held only while every token was exactly as wide as the text it produced. A variable-width name shifted everything after it, and mismatched input yielded a wrong date instead of an error. Three consequences are gone: `yyyy` always produced the year 1970, `YY` and `yy` were not recognised at all, and a pattern containing `LM`, `SM`, `WS`, `WL` or `tz` misread every component that followed. Patterns that used to "work" by returning wrong data now throw.
+> **Changed in 1.x.** `parse` used to read each component at the offset its token sat at in the pattern, which held only while every token was exactly as wide as the text it produced. A variable-width name shifted everything after it, and mismatched input yielded a wrong date instead of an error. Three consequences are gone: `yyyy` always produced the year 1970, `YY` and `yy` were not recognised at all, and a pattern containing `LM`, `SM`, `WS`, `WL` or `tz` misread every component that followed. Input whose separators or padding disagree with the pattern now throws instead of returning wrong data. Text past the last token is still ignored, as before.
 
 #### DST transitions
 

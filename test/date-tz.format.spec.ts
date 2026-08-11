@@ -55,6 +55,65 @@ describe('toString and parse agree on one token vocabulary', () => {
   });
 });
 
+/**
+ * ISO 8601 writes the break between date and time as `T`; RFC 3339 §5.6
+ * allows a space in its place. They mean the same thing, so a pattern
+ * written with either accepts both — an HTML `datetime-local` input hands
+ * over `2026-08-13T13:45` whatever separator the pattern happens to use.
+ */
+describe('the date/time separator accepts T and space alike', () => {
+  it.each([
+    ['2026-08-13T13:45', 'YYYY-MM-DD HH:mm'],
+    ['2026-08-13 13:45', 'YYYY-MM-DD HH:mm'],
+    ['2026-08-13T13:45', 'YYYY-MM-DDTHH:mm'],
+    ['2026-08-13 13:45', 'YYYY-MM-DDTHH:mm'],
+  ])('parses %s against %s', (input, pattern) => {
+    expect(DateTz.parse(input, pattern, 'Etc/UTC').toString()).toBe('2026-08-13 13:45:00');
+  });
+
+  it('applies to patterns carrying seconds too', () => {
+    expect(DateTz.parse('2026-08-13T13:45:30', 'YYYY-MM-DD HH:mm:ss', 'Etc/UTC').toString())
+      .toBe('2026-08-13 13:45:30');
+  });
+
+  // The pattern says what to read, not everything the string may carry.
+  it.each([
+    ['fractional seconds', '2026-08-13T13:45:30.123'],
+    ['a Zulu suffix', '2026-08-13T13:45:30Z'],
+    ['a numeric offset', '2026-08-13T13:45:30+02:00'],
+    ['both', '2026-08-13T13:45:30.123+02:00'],
+  ])('reads an ISO value carrying %s', (_label, input) => {
+    expect(DateTz.parse(input, 'YYYY-MM-DD HH:mm:ss', 'Etc/UTC').toString())
+      .toBe('2026-08-13 13:45:30');
+  });
+
+  // The suffix is skipped, not honoured: the zone is the one passed in.
+  it('leaves the timezone to the argument, not the suffix', () => {
+    const d = DateTz.parse('2026-08-13T13:45:30+02:00', 'YYYY-MM-DD HH:mm:ss', 'Europe/Rome');
+    expect(d.timezone).toBe('Europe/Rome');
+    expect(d.toString()).toBe('2026-08-13 13:45:30');
+  });
+
+  it('reads a prefix when the pattern is shorter than the string', () => {
+    expect(DateTz.parse('2026-08-13T13:45', 'YYYY-MM-DD', 'Etc/UTC').toString())
+      .toBe('2026-08-13 00:00:00');
+  });
+
+  it('does not accept any other character as the separator', () => {
+    expect(() => DateTz.parse('2026-08-13X13:45', 'YYYY-MM-DD HH:mm', 'Etc/UTC'))
+      .toThrow(/does not match pattern/);
+  });
+
+  // Only a separator on its own is interchangeable — a T inside a longer
+  // run of literal text belongs to that text.
+  it('leaves a T inside a word literal', () => {
+    expect(DateTz.parse('2026-08-13 GMT 13:45', 'YYYY-MM-DD GMT HH:mm', 'Etc/UTC').toString())
+      .toBe('2026-08-13 13:45:00');
+    expect(() => DateTz.parse('2026-08-13 GM 13:45', 'YYYY-MM-DD GMT HH:mm', 'Etc/UTC'))
+      .toThrow(/does not match pattern/);
+  });
+});
+
 describe('parse refuses what it cannot read instead of guessing', () => {
   it.each([
     ['LM DD, YYYY', 'June 22, 2026'],
@@ -66,9 +125,9 @@ describe('parse refuses what it cannot read instead of guessing', () => {
   it.each([
     ['separator mismatch', '2026-06-22', 'YYYY/MM/DD'],
     ['unpadded components', '26-6-2', 'YYYY-MM-DD'],
-    ['trailing text', '2026-06-22 extra', 'YYYY-MM-DD'],
     ['truncated input', '2026-06', 'YYYY-MM-DD'],
     ['non-numeric component', 'abcd-06-22', 'YYYY-MM-DD'],
+    ['a component the pattern needs but the string lacks', '2026-08-13T13:45', 'YYYY-MM-DD HH:mm:ss'],
   ])('rejects %s', (_label, input, pattern) => {
     expect(() => DateTz.parse(input, pattern, 'Etc/UTC')).toThrow(/does not match pattern/);
   });

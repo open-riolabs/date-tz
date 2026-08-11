@@ -63,6 +63,26 @@ function escapeRegExp(literal: string): string {
   return literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/** Matches either character that can separate a date from a time. */
+const DATE_TIME_SEPARATOR = '[T ]';
+
+/**
+ * Compiles the literal text between two tokens.
+ *
+ * Separators are matched literally, with one exception: ISO 8601 writes the
+ * break between date and time as `T`, and RFC 3339 §5.6 allows a space in
+ * its place, so the two mean the same thing and are accepted for each other.
+ * Without this a pattern written with a space rejects `2026-08-13T13:45` —
+ * the shape an HTML `datetime-local` input produces — and vice versa.
+ *
+ * A lone `T` is the separator; a `T` inside a longer run of text is part of
+ * that text and stays literal.
+ */
+function compileLiteral(literal: string): string {
+  if (literal === 'T') return DATE_TIME_SEPARATOR;
+  return escapeRegExp(literal).replace(/ /g, DATE_TIME_SEPARATOR);
+}
+
 /**
  * A pattern compiled into something that can read a date string back:
  * an anchored RegExp, and the tokens its capture groups correspond to.
@@ -750,13 +770,21 @@ export class DateTz implements IDateTz {
       if (UNPARSEABLE_TOKENS.has(token)) {
         throw new Error(`Pattern token '${token}' cannot be parsed: month names depend on a locale that parse() does not receive. Use 'MM' instead.`);
       }
-      source += escapeRegExp(pattern.slice(literalStart, match.index));
+      source += compileLiteral(pattern.slice(literalStart, match.index));
       source += TOKEN_MATCHERS[token];
       tokens.push(token);
       literalStart = match.index + token.length;
     }
 
-    source += escapeRegExp(pattern.slice(literalStart)) + '$';
+    // Anchored at the start but deliberately not at the end: the pattern
+    // states what to read, not everything the string is allowed to carry.
+    // ISO 8601 values arrive with fractional seconds and a zone suffix
+    // (`.123`, `Z`, `+02:00`) that a pattern down to the second does not
+    // mention, and rejecting them would be rejecting a valid instant over
+    // detail the caller already decided not to read. The zone suffix is
+    // among what is skipped: the timezone stays the one passed in, matching
+    // how the `tz` token is treated.
+    source += compileLiteral(pattern.slice(literalStart));
 
     const compiled: CompiledPattern = { regex: new RegExp(source, 'u'), tokens };
     DateTz._patternCache.set(pattern, compiled);
