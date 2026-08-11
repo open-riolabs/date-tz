@@ -1,4 +1,4 @@
-import { DateTz } from './date-tz';
+import { DateTz } from '../src/date-tz';
 
 describe('DateTz.toString formatting', () => {
   it('uses default pattern when none provided', () => {
@@ -12,8 +12,12 @@ describe('DateTz.toString formatting', () => {
   });
 
   it('uses default pattern when none provided', () => {
-    const d = new DateTz(1797942234000, 'Africa/Casablanca');
-    expect(d.toString()).toBe('2026-12-22 13:23:54');
+    // June 2026, deliberately before Morocco's 2026-09-20 move to permanent
+    // UTC+0: an instant after it renders differently depending on how fresh
+    // the runtime's timezone database is, which is no basis for a format
+    // assertion. The move itself is covered in date-tz.morocco.spec.ts.
+    const d = new DateTz(1782131034000, 'Africa/Casablanca');
+    expect(d.toString()).toBe('2026-06-22 13:23:54');
   });
 
   it('uses default pattern when none provided', () => {

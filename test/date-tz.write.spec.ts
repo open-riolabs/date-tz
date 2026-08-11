@@ -1,4 +1,4 @@
-import { DateTz } from "./date-tz";
+import { DateTz } from "../src/date-tz";
 
 describe('DateTz.now', () => {
 
@@ -48,9 +48,12 @@ describe('DateTz.now', () => {
   });
 
   it("returns a parsed timestamp in requested timezone", () => {
-    const parsed = DateTz.parse("2026-12-22 13:23:54", "YYYY-MM-DD HH:mm:ss", "Africa/Casablanca");
+    // Before Morocco's 2026-09-20 move to permanent UTC+0, so the wall clock
+    // maps to one instant regardless of how fresh the runtime's timezone
+    // database is. The move itself is covered in date-tz.morocco.spec.ts.
+    const parsed = DateTz.parse("2026-06-22 13:23:54", "YYYY-MM-DD HH:mm:ss", "Africa/Casablanca");
     expect(parsed.timezone).toBe('Africa/Casablanca');
-    expect(parsed.timestamp).toBe(1797942234000);
+    expect(parsed.timestamp).toBe(1782131034000);
   });
 
   it("returns a parsed timestamp in requested timezone", () => {

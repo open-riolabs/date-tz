@@ -12,7 +12,11 @@
       "DOM"
     ],
     "sourceMap": true,
-    "outDir": "./dist",
+    // Tests compile to their own tree: src and test sit side by side here,
+    // which would otherwise leave a second copy of the sources inside the
+    // published dist.
+    "outDir": "./dist-test",
+    "rootDir": "./",
     "baseUrl": "./",
     "incremental": true,
     "skipLibCheck": true,
@@ -24,10 +28,12 @@
     "strict": true
   },
   "include": [
-    "./**/*"
+    "./src/**/*",
+    "./test/**/*"
   ],
   "exclude": [
     "node_modules",
     "dist",
+    "dist-test",
   ]
 }

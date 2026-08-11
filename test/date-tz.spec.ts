@@ -1,4 +1,4 @@
-import { DateTz } from './date-tz';
+import { DateTz } from '../src/date-tz';
 
 describe('DateTz constructor', () => {
   it('normalizes "UTC" alias to "Etc/UTC"', () => {

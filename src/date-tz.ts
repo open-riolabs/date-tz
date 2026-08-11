@@ -1,6 +1,7 @@
 import { canonicalLink, etc } from "./canonical-link";
-import { getOffsetSeconds, tzDiscover, } from "./helpers";
-import { IDateTz } from "./idate-tz";
+import { getOffsetSeconds } from "./helpers";
+import { DateParts, IDateTz } from "./interfaces";
+import { getTzProvider } from "./tz-provider";
 
 const MS_PER_MINUTE = 60000;
 const MS_PER_HOUR = 3600000;
@@ -9,21 +10,6 @@ const MS_PER_DAY = 86400000;
 // Epoch time constants
 const epochYear = 1970;
 const daysPerMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-
-/**
- * The calendar components of an instant. Always relative to a wall clock
- * (UTC for the raw timestamp, or the local one once the offset is applied).
- */
-interface DateParts {
-  year: number;
-  /** Zero-based, 0 = January. */
-  month: number;
-  day: number;
-  hour: number;
-  minute: number;
-  second: number;
-  millisecond: number;
-}
 
 function isLeap(year: number): boolean {
   return (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
@@ -38,6 +24,53 @@ function daysInMonthOf(year: number, month: number): number {
 }
 
 const BEFORE_EPOCH = 'Dates before 1970-01-01 are not supported';
+
+/**
+ * The one vocabulary both `toString` and `parse` speak. Longer tokens come
+ * first so `YYYY` is never read as `YY` followed by a stray `YY`.
+ *
+ * Formatting and parsing used to keep separate lists, which let `toString`
+ * emit tokens `parse` did not recognise: the round trip then silently
+ * dropped a component instead of failing.
+ */
+const FORMAT_TOKENS = 'YYYY|yyyy|YY|yy|MM|LM|SM|DD|HH|hh|mm|ss|aa|AA|WS|WL|tz';
+
+/**
+ * What each token consumes when parsing. Text tokens are matched so the
+ * rest of the pattern stays aligned, but contribute nothing: a weekday is
+ * implied by the date, and the zone arrives as an argument.
+ */
+const TOKEN_MATCHERS: Record<string, string> = {
+  YYYY: '(\\d{4})', yyyy: '(\\d{4})',
+  YY: '(\\d{2})', yy: '(\\d{2})',
+  MM: '(\\d{2})', DD: '(\\d{2})',
+  HH: '(\\d{2})', hh: '(\\d{2})',
+  mm: '(\\d{2})', ss: '(\\d{2})',
+  aa: '([AaPp][Mm])', AA: '([AaPp][Mm])',
+  WS: '(\\p{L}+\\.?)', WL: '(\\p{L}+)',
+  tz: '([A-Za-z0-9_+/-]+)',
+};
+
+/**
+ * Month names are the one thing `parse` cannot read back: resolving them
+ * needs the locale they were written in, and `parse` is not given one.
+ * Failing loudly beats guessing at a language.
+ */
+const UNPARSEABLE_TOKENS = new Set(['LM', 'SM']);
+
+/** Escapes the literal text between tokens for use inside a RegExp. */
+function escapeRegExp(literal: string): string {
+  return literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * A pattern compiled into something that can read a date string back:
+ * an anchored RegExp, and the tokens its capture groups correspond to.
+ */
+interface CompiledPattern {
+  regex: RegExp;
+  tokens: string[];
+}
 
 /**
  * Splits a millisecond count since the epoch into calendar components.
@@ -203,7 +236,7 @@ export class DateTz implements IDateTz {
   /** Re-resolves offset and DST for the current instant and zone. */
   private resolveOffset(): void {
     if (this._timestamp === undefined || this._timezone === undefined) return;
-    const tzOffset = tzDiscover(this._timestamp, this._timezone);
+    const tzOffset = getTzProvider().offsetAt(this._timestamp, this._timezone);
     this._timezoneOffset = Math.round(tzOffset.offset * 60 * 1000);
     this._isDst = tzOffset.isDst;
   }
@@ -252,8 +285,16 @@ export class DateTz implements IDateTz {
     const hour12 = hour % 12 || 12; // Convert to 12-hour format
 
     if (!locale) locale = 'en';
-    let formatterTzLong = new Intl.DateTimeFormat(locale, { timeZone: this.timezone, hour12: false, month: 'long', weekday: 'long' });
-    let formatterTzShort = new Intl.DateTimeFormat(locale, { timeZone: this.timezone, hour12: false, month: 'short', weekday: 'short' });
+    // Month and weekday names are read off the wall clock this instance has
+    // already resolved, rendered as UTC — not by handing Intl the zone and
+    // letting it convert a second time. Those two agree only while the
+    // offsets agree, and a custom TzProvider is free to disagree with the
+    // runtime: the numeric tokens would follow the provider while the names
+    // followed Intl, and a single toString() could name the wrong weekday
+    // for the date beside it.
+    const wallClock = this._timestamp + this._timezoneOffset;
+    let formatterTzLong = new Intl.DateTimeFormat(locale, { timeZone: 'UTC', month: 'long', weekday: 'long' });
+    let formatterTzShort = new Intl.DateTimeFormat(locale, { timeZone: 'UTC', month: 'short', weekday: 'short' });
 
     // Map components to pattern tokens
     const tokens: Record<string, any> = {
@@ -262,8 +303,8 @@ export class DateTz implements IDateTz {
       yyyy: year.toString(),
       yy: String(year).slice(-2),
       MM: String(month + 1).padStart(2, '0'),
-      LM: formatterTzLong.formatToParts(this.timestamp).find(o => o.type === 'month').value,
-      SM: formatterTzShort.formatToParts(this.timestamp).find(o => o.type === 'month').value,
+      LM: formatterTzLong.formatToParts(wallClock).find(o => o.type === 'month').value,
+      SM: formatterTzShort.formatToParts(wallClock).find(o => o.type === 'month').value,
       DD: String(day).padStart(2, '0'),
       HH: String(hour).padStart(2, '0'),
       mm: String(minute).padStart(2, '0'),
@@ -272,12 +313,12 @@ export class DateTz implements IDateTz {
       AA: pm,
       hh: hour12.toString().padStart(2, '0'),
       tz: this.timezone,
-      WS: formatterTzShort.formatToParts(this.timestamp).find(o => o.type === 'weekday').value,
-      WL: formatterTzLong.formatToParts(this.timestamp).find(o => o.type === 'weekday').value
+      WS: formatterTzShort.formatToParts(wallClock).find(o => o.type === 'weekday').value,
+      WL: formatterTzLong.formatToParts(wallClock).find(o => o.type === 'weekday').value
     };
 
     // Replace pattern tokens with actual values
-    return pattern.replace(/YYYY|yyyy|YY|yy|MM|LM|SM|DD|HH|hh|mm|ss|aa|AA|WS|WL|tz/g, (match) => tokens[match]);
+    return pattern.replace(new RegExp(FORMAT_TOKENS, 'g'), (match) => tokens[match]);
   }
 
   /**
@@ -539,60 +580,105 @@ export class DateTz implements IDateTz {
   static parse(dateString: string, pattern?: string, tz?: string): DateTz {
     if (!pattern) pattern = DateTz.defaultFormat;
     tz = DateTz.normalizeTimeZone(tz);
-    if (pattern.includes('hh') && !pattern.includes('aa') && !pattern.includes('AA')) {
+
+    const { regex, tokens } = DateTz.compilePattern(pattern);
+
+    if (tokens.includes('hh') && !tokens.includes('aa') && !tokens.includes('AA')) {
       throw new Error('AM/PM marker (aa or AA) is required when using 12-hour format (hh)');
     }
 
-    const regex = /YYYY|yyyy|MM|DD|HH|hh|mm|ss|aa|AA/g;
-    const dateComponents: { [key: string]: number | string; } = {
-      YYYY: 1970,
-      yyyy: 1970,
-      MM: 1,
-      DD: 1,
-      HH: 0,
-      hh: 0,
-      aa: 'am',
-      AA: "AM",
-      mm: 0,
-      ss: 0,
-    };
-
-    let match: RegExpExecArray | null;
-    while ((match = regex.exec(pattern)) !== null) {
-      const token = match[0];
-      if (token === 'aa' || token === 'AA') {
-        dateComponents[token] = dateString.substring(match.index, match.index + token.length);
-      } else {
-        const value = parseInt(dateString.substring(match.index, match.index + token.length), 10);
-        dateComponents[token] = value;
-      }
+    const match = regex.exec(dateString);
+    if (!match) {
+      throw new Error(`Date string "${dateString}" does not match pattern "${pattern}"`);
     }
 
-    const year = (dateComponents.YYYY as number) || (dateComponents.yyyy as number);
-    const month = (dateComponents.MM as number) - 1; // Months are zero-based
-    const day = dateComponents.DD as number;
-    let hour = 0;
-    if (pattern.includes('hh')) {
-      // Read the marker the pattern actually carries: the other one still
-      // holds its default and would mask a PM value.
-      const ampm = (pattern.includes('AA') ? dateComponents.AA : dateComponents.aa) as string;
-      const hh12 = dateComponents.hh as number;
-      const isPm = ampm && ampm.toUpperCase() === 'PM';
+    // Capture groups follow the tokens in order, so the two zip together.
+    const captured: Record<string, string> = {};
+    tokens.forEach((token, i) => { captured[token] = match[i + 1]; });
+
+    const num = (token: string): number | undefined =>
+      captured[token] === undefined ? undefined : parseInt(captured[token], 10);
+
+    // A pattern that carries no year at all still parses; it just lands on
+    // the epoch year, as every other missing component lands on its floor.
+    let year = num('YYYY') ?? num('yyyy');
+    if (year === undefined) {
+      const twoDigit = num('YY') ?? num('yy');
+      // Two-digit years run 1970..2069: the window starts where this
+      // library's supported range does.
+      if (twoDigit !== undefined) year = twoDigit < 70 ? 2000 + twoDigit : 1900 + twoDigit;
+    }
+
+    let hour: number;
+    const hour12 = num('hh');
+    if (hour12 !== undefined) {
+      const marker = (captured['AA'] ?? captured['aa'] ?? '').toUpperCase();
+      const isPm = marker === 'PM';
       // 12 AM -> 0, 12 PM -> 12, otherwise hh or hh+12
-      if (hh12 === 12) hour = isPm ? 12 : 0;
-      else hour = isPm ? hh12 + 12 : hh12;
+      if (hour12 === 12) hour = isPm ? 12 : 0;
+      else hour = isPm ? hour12 + 12 : hour12;
     } else {
-      hour = dateComponents.HH as number;
+      hour = num('HH') ?? 0;
     }
-    const minute = dateComponents.mm as number;
-    const second = dateComponents.ss as number;
 
-    let timestamp = compose({ year, month, day, hour, minute, second, millisecond: 0 });
+    let timestamp = compose({
+      year: year ?? epochYear,
+      month: (num('MM') ?? 1) - 1, // Months are zero-based
+      day: num('DD') ?? 1,
+      hour,
+      minute: num('mm') ?? 0,
+      second: num('ss') ?? 0,
+      millisecond: 0,
+    });
 
     const offset = getOffsetSeconds(timestamp, tz) * 1000;
     timestamp -= offset;
     const date = new DateTz(timestamp, tz);
     return date;
+  }
+
+  private static _patternCache = new Map<string, CompiledPattern>();
+
+  /**
+   * Compiles a format pattern into an anchored RegExp that reads a date
+   * string back.
+   *
+   * Parsing walks the pattern and the string together rather than reading
+   * each component at the offset its token sits at. Positional reads only
+   * hold while every token is exactly as wide as the text it produced, so a
+   * single variable-width name — a month, a weekday, a zone id — used to
+   * shift every component after it and yield a wrong date, or a complaint
+   * about the epoch, rather than a word about the pattern.
+   *
+   * @param pattern - The format pattern to compile.
+   * @throws Error if the pattern carries a token that cannot be read back.
+   */
+  private static compilePattern(pattern: string): CompiledPattern {
+    const cached = DateTz._patternCache.get(pattern);
+    if (cached) return cached;
+
+    const tokens: string[] = [];
+    const finder = new RegExp(FORMAT_TOKENS, 'g');
+    let source = '^';
+    let literalStart = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = finder.exec(pattern)) !== null) {
+      const token = match[0];
+      if (UNPARSEABLE_TOKENS.has(token)) {
+        throw new Error(`Pattern token '${token}' cannot be parsed: month names depend on a locale that parse() does not receive. Use 'MM' instead.`);
+      }
+      source += escapeRegExp(pattern.slice(literalStart, match.index));
+      source += TOKEN_MATCHERS[token];
+      tokens.push(token);
+      literalStart = match.index + token.length;
+    }
+
+    source += escapeRegExp(pattern.slice(literalStart)) + '$';
+
+    const compiled: CompiledPattern = { regex: new RegExp(source, 'u'), tokens };
+    DateTz._patternCache.set(pattern, compiled);
+    return compiled;
   }
 
   /**

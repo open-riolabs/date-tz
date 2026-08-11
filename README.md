@@ -53,7 +53,7 @@ Both properties are writable; assigning to either re-resolves `timezoneOffset` a
 | `minute`          | `number`  | Minute 0–59 in the instance's timezone.        |
 | `dayOfWeek`       | `number`  | Day of week 0–6 (0 = Sunday) in the timezone.  |
 | `timezoneOffset`  | `number`  | Current offset from UTC in **milliseconds**.   |
-| `isDst`           | `boolean` | Whether DST is active at this instant.         |
+| `isDst`           | `boolean` | Whether the clock is ahead of the zone's standard offset. See [Timezone data](#timezone-data). |
 | `isLeapYear`      | `boolean` | Whether the current year is a leap year.       |
 
 ### UTC equivalents
@@ -70,23 +70,29 @@ Formats the date using the given pattern (defaults to `YYYY-MM-DD HH:mm:ss`).
 
 **Format tokens**
 
-| Token      | Output                             |
-| ---------- | ---------------------------------- |
-| `YYYY` `yyyy` | Full year (e.g. `2026`)         |
-| `YY` `yy`  | Last 2 digits of year              |
-| `MM`       | Month 01–12                        |
-| `LM`       | Full month name (locale-aware)     |
-| `SM`       | Short month name (locale-aware)    |
-| `DD`       | Day 01–31                          |
-| `HH`       | Hour 00–23 (24h)                   |
-| `hh`       | Hour 01–12 (12h, pair with `aa`)   |
-| `mm`       | Minute 00–59                       |
-| `ss`       | Second 00–59                       |
-| `aa`       | am/pm                              |
-| `AA`       | AM/PM                              |
-| `WL`       | Full weekday name (locale-aware)   |
-| `WS`       | Short weekday name (locale-aware)  |
-| `tz`       | Timezone identifier string         |
+`toString` and [`parse`](#datetzparsedatestring-string-pattern-string-tz-string-datetz) share one token vocabulary. The last column says what `parse` does with each token when it reads the string back.
+
+| Token      | Output                             | Read back by `parse`            |
+| ---------- | ---------------------------------- | ------------------------------- |
+| `YYYY` `yyyy` | Full year (e.g. `2026`)         | yes                             |
+| `YY` `yy`  | Last 2 digits of year              | yes, as 1970–2069               |
+| `MM`       | Month 01–12                        | yes                             |
+| `LM`       | Full month name (locale-aware)     | **no** — `parse` throws         |
+| `SM`       | Short month name (locale-aware)    | **no** — `parse` throws         |
+| `DD`       | Day 01–31                          | yes                             |
+| `HH`       | Hour 00–23 (24h)                   | yes                             |
+| `hh`       | Hour 01–12 (12h, pair with `aa`)   | yes                             |
+| `mm`       | Minute 00–59                       | yes                             |
+| `ss`       | Second 00–59                       | yes                             |
+| `aa`       | am/pm                              | yes                             |
+| `AA`       | AM/PM                              | yes                             |
+| `WL`       | Full weekday name (locale-aware)   | matched, then ignored           |
+| `WS`       | Short weekday name (locale-aware)  | matched, then ignored           |
+| `tz`       | Timezone identifier string         | matched, then ignored           |
+
+Month names are the one thing `parse` cannot read back: resolving them needs the locale they were written in, and `parse` takes no locale. It throws rather than guess at a language. Weekdays and zone identifiers are matched so the components after them stay aligned, but contribute nothing — a weekday is implied by the date, and the zone arrives as an argument.
+
+Names follow the wall clock the instance resolved, so they always agree with the numeric tokens beside them — including under a custom [`TzProvider`](#tzprovider) that disagrees with the runtime.
 
 ---
 
@@ -168,6 +174,17 @@ Parses a string to a `DateTz` instance. Pattern defaults to `YYYY-MM-DD HH:mm:ss
 const d = DateTz.parse('2025-11-06 11:05:00 PM', 'YYYY-MM-DD hh:mm:ss AA', 'America/New_York');
 ```
 
+The whole string must match the whole pattern: separators are compared literally, numeric components must carry their padding, and trailing text is rejected. A string that does not fit throws, naming the pattern it failed against.
+
+```ts
+DateTz.parse('2026-06-22', 'YYYY/MM/DD');   // throws: does not match pattern "YYYY/MM/DD"
+DateTz.parse('26-6-2', 'YYYY-MM-DD');       // throws: unpadded components
+```
+
+Components the pattern omits fall back to their floor — year `1970`, month and day `01`, everything else `0` — so a partial pattern parses rather than failing.
+
+> **Changed in 1.x.** `parse` used to read each component at the offset its token sat at in the pattern, which held only while every token was exactly as wide as the text it produced. A variable-width name shifted everything after it, and mismatched input yielded a wrong date instead of an error. Three consequences are gone: `yyyy` always produced the year 1970, `YY` and `yy` were not recognised at all, and a pattern containing `LM`, `SM`, `WS`, `WL` or `tz` misread every component that followed. Patterns that used to "work" by returning wrong data now throw.
+
 #### DST transitions
 
 A DST transition can leave a wall-clock time **ambiguous** (it happens twice, when clocks go back) or **non-existent** (it is skipped, when clocks go forward). Both resolve with the offset in effect *before* the transition — the same convention as Temporal's `compatible` disambiguation, Luxon and `java.time`. The rule holds in every zone, whichever side of UTC it sits on.
@@ -204,6 +221,62 @@ Returns the canonical IANA timezone identifiers supported by the runtime.
 | Property              | Default                   |
 | --------------------- | ------------------------- |
 | `DateTz.defaultFormat` | `'YYYY-MM-DD HH:mm:ss'`  |
+
+---
+
+## Timezone data
+
+UTC offsets come from **the runtime's own copy of the IANA timezone database**, read through `Intl`. The library ships no zone data of its own, which keeps it dependency-free and as current as the host — but it also means the answer depends on the host, not on the version of this package.
+
+Check what a runtime carries:
+
+```bash
+node -p "process.versions.tz"
+```
+
+When a country changes its rules, an outdated runtime keeps returning the old offset for dates after the change, and there is nothing this package can do about it from the outside. That is what the provider below is for.
+
+### How `isDst` is decided
+
+`isDst` is true when the instant's offset is **ahead of the zone's standard offset**, taken as the lowest offset the zone observes across the calendar year. It is not read from the zone's display name: `Intl` renders several zones as a bare `GMT+01:00` with no name to match on, and names are locale-dependent besides.
+
+Two consequences worth knowing:
+
+- **Europe/Dublin** models winter as *negative* DST off a standard of UTC+1, so IANA would call January its DST period. This library reports summer instead — the question users actually mean.
+- **Africa/Casablanca** ran on UTC+1 year-round with a pause at UTC+0 for Ramadan, so before 2026-09-20 the pause reads as standard time and the rest of the year as DST.
+
+### `TzProvider`
+
+Every offset lookup goes through a single provider, so the zone rules can be replaced wholesale:
+
+```ts
+import { setTzProvider, intlTzProvider, TzProvider } from '@open-rlb/date-tz';
+
+const pinned: TzProvider = {
+  offsetAt: (timestamp, timezone) => timezone === 'Europe/Rome'
+    ? { offset: 60, isDst: false }        // offset in minutes east of UTC
+    : intlTzProvider.offsetAt(timestamp, timezone),
+};
+
+setTzProvider(pinned);
+setTzProvider(null);   // restore the runtime's rules
+```
+
+Install a provider **before** constructing dates: an instance resolves its offset on construction and does not revisit it.
+
+### Morocco's move to permanent UTC+0
+
+Morocco abolished daylight saving time on **2026-09-20 at 02:00 local**, settling on permanent UTC+0 and dropping the Ramadan pause. The change applies to `Africa/Casablanca` and `Africa/El_Aaiun` (Western Sahara). Announcements citing 21 September refer to the first full day on the new offset.
+
+Runtimes shipping a timezone database older than that release still resolve Moroccan dates after the transition to UTC+1. `installMoroccoOverride()` corrects them:
+
+```ts
+import { installMoroccoOverride, runtimeKnowsMoroccoChange } from '@open-rlb/date-tz';
+
+installMoroccoOverride();   // true if the correction was needed and applied
+```
+
+It is **self-cancelling**: on a runtime that already carries the rule it installs nothing and returns `false`, so it never fights a database that has since learned the real rule. Calling it more than once is safe. Use `runtimeKnowsMoroccoChange()` to inspect the runtime directly.
 
 ---
 

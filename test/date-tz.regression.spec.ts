@@ -1,4 +1,4 @@
-import { DateTz } from './date-tz';
+import { DateTz } from '../src/date-tz';
 
 /** Independent reference: how Intl renders an instant in a zone. */
 function intlRead(ts: number, tz: string): string {

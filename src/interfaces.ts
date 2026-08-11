@@ -1,5 +1,55 @@
 
 /**
+ * The calendar components of an instant. Always relative to a wall clock
+ * (UTC for the raw timestamp, or the local one once the offset is applied).
+ */
+export interface DateParts {
+  year: number;
+  /** Zero-based, 0 = January. */
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+  millisecond: number;
+}
+
+/**
+ * The offset and DST state of an instant in a zone.
+ */
+export interface TzInfo {
+  /**
+   * Offset east of UTC in minutes, fractional for the sub-minute offsets
+   * several zones carried before 1972.
+   */
+  offset: number;
+  /** Whether the zone's clock is shifted off its standard offset. */
+  isDst: boolean;
+}
+
+/**
+ * Resolves the offset and DST state of an instant in a zone.
+ *
+ * Resolving a UTC offset is the one thing this library cannot work out on its
+ * own: it needs the IANA timezone database. By default that data comes from
+ * the runtime through `Intl`, which keeps the package dependency-free and as
+ * current as whatever tzdata the host happens to ship.
+ *
+ * That default is a trade-off rather than a law. A host pinned to an old
+ * runtime, a deployment that must freeze its zone rules, or a test that needs
+ * a rule the runtime has not shipped yet all want to answer the question
+ * differently. Routing every lookup through a provider makes the answer
+ * replaceable without touching the rest of the library.
+ */
+export interface TzProvider {
+  /**
+   * @param timestamp - The instant, in milliseconds since the Unix epoch.
+   * @param timezone - The IANA timezone identifier.
+   */
+  offsetAt(timestamp: number, timezone: string): TzInfo;
+}
+
+/**
  * Represents a date with timezone information and related operations.
  */
 export interface IDateTz {
