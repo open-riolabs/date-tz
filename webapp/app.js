@@ -1,4 +1,10 @@
-import { DateTz } from './lib/index.js';
+import {
+  DateTz,
+  MOROCCO_PERMANENT_UTC_FROM,
+  installMoroccoOverride,
+  runtimeKnowsMoroccoChange,
+  setTzProvider,
+} from './lib/index.js';
 
 // ─────────────────────── shared state / helpers ───────────────────────
 
@@ -62,9 +68,10 @@ function inspect(d) {
     ['isDst', String(d.isDst)],
     ['isLeapYear', String(d.isLeapYear)],
     ['year / month / day', `${d.year} / ${d.month + 1} / ${d.day}`],
-    ['hour : minute', `${String(d.hour).padStart(2,'0')} : ${String(d.minute).padStart(2,'0')}`],
+    ['hour : minute : second', `${String(d.hour).padStart(2,'0')} : ${String(d.minute).padStart(2,'0')} : ${String(d.second).padStart(2,'0')}`],
+    ['millisecond', String(d.millisecond)],
     ['dayOfWeek', String(d.dayOfWeek)],
-    ['UTC equivalents', `${d.yearUTC}-${String(d.monthUTC + 1).padStart(2,'0')}-${String(d.dayUTC).padStart(2,'0')} ${String(d.hourUTC).padStart(2,'0')}:${String(d.minuteUTC).padStart(2,'0')}`],
+    ['UTC equivalents', `${d.yearUTC}-${String(d.monthUTC + 1).padStart(2,'0')}-${String(d.dayUTC).padStart(2,'0')} ${String(d.hourUTC).padStart(2,'0')}:${String(d.minuteUTC).padStart(2,'0')}:${String(d.secondUTC).padStart(2,'0')}`],
   ]);
 }
 
@@ -340,6 +347,60 @@ manApply.addEventListener('click', () => {
 manReset.addEventListener('click', rebuildFromSource);
 [manSrc, manPattern, manTz].forEach(el => el.addEventListener('change', rebuildFromSource));
 rebuildFromSource();
+
+// ─────────────────────── timezone data / Morocco ───────────────────────
+
+const tzProbe = $('#tzProbe');
+const tzOverrideBtn = $('#tzOverrideBtn');
+const tzdataResult = $('#tzdataResult');
+
+const MOROCCO_ZONES = ['Africa/Casablanca', 'Africa/El_Aaiun'];
+
+/** A minute after the transition, and a winter instant well past it. */
+const JUST_AFTER = MOROCCO_PERMANENT_UTC_FROM + 60_000;
+const NEXT_WINTER = DateTz.parse('2026-12-22 12:00:00', 'YYYY-MM-DD HH:mm:ss', 'Etc/UTC').timestamp;
+
+let overrideInstalled = false;
+
+function renderTzData() {
+  const knows = runtimeKnowsMoroccoChange();
+
+  tzProbe.innerHTML = knows
+    ? '<span class="chip">up to date</span> Your browser already resolves Morocco to UTC+0 after the change. The override would install nothing.'
+    : '<span class="chip dst">stale</span> Your browser still resolves Morocco to UTC+1 after the change. The override corrects it.';
+
+  tzOverrideBtn.disabled = knows;
+  tzOverrideBtn.textContent = overrideInstalled ? 'Remove override' : 'Install override';
+
+  const rows = [];
+  for (const tz of MOROCCO_ZONES) {
+    for (const [label, ts] of [['just after the transition', JUST_AFTER], ['the following winter', NEXT_WINTER]]) {
+      const d = new DateTz(ts, tz);
+      rows.push([`${tz} — ${label}`, `${d.toString()} · ${offsetStr(d.timezoneOffset)} · isDst ${d.isDst}`]);
+    }
+  }
+
+  // The last instant on the old rules, which no override should touch.
+  const before = new DateTz(MOROCCO_PERMANENT_UTC_FROM - 60_000, 'Africa/Casablanca');
+  rows.push(['Africa/Casablanca — a minute before', `${before.toString()} · ${offsetStr(before.timezoneOffset)}`]);
+
+  tzdataResult.replaceChildren(kvTable(rows));
+}
+
+tzOverrideBtn.addEventListener('click', () => {
+  if (overrideInstalled) {
+    setTzProvider(null);
+    overrideInstalled = false;
+  } else {
+    overrideInstalled = installMoroccoOverride();
+  }
+  renderTzData();
+  // Every other panel resolves offsets through the same provider.
+  rebuildFromSource();
+  updateClockTiles();
+});
+
+renderTzData();
 
 // ─────────────────────── global tick ───────────────────────
 

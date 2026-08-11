@@ -16,12 +16,13 @@ describe('offset and DST stay in sync with the instant', () => {
     const d = DateTz.parse('2025-01-15 12:00:00', 'YYYY-MM-DD HH:mm:ss', 'Europe/Rome');
     d.add(6, 'month');
 
-    // arithmetic happens on the UTC timestamp, by design
-    expect(new Date(d.timestamp).toISOString()).toBe('2025-07-15T11:00:00.000Z');
-    // ...and the local read reflects the offset of the new instant
+    // Calendar arithmetic keeps the local clock time: noon in January is
+    // noon in July, and the instant absorbs the extra DST hour.
+    expect(d.toString()).toBe('2025-07-15 12:00:00');
+    expect(new Date(d.timestamp).toISOString()).toBe('2025-07-15T10:00:00.000Z');
+    // ...and the offset reflects the zone's state at the new instant
     expect(d.timezoneOffset).toBe(7200000);
     expect(d.isDst).toBe(true);
-    expect(d.toString()).toBe('2025-07-15 13:00:00');
     expect(d.toString()).toBe(intlRead(d.timestamp, 'Europe/Rome'));
   });
 
@@ -52,10 +53,13 @@ describe('offset and DST stay in sync with the instant', () => {
     expect(d.toString()).toBe(intlRead(d.timestamp, 'Asia/Tokyo'));
   });
 
-  it('keeps add() on a UTC wall clock, as designed', () => {
+  it('sets the component a reader in the zone would see', () => {
     const d = DateTz.parse('2025-06-15 08:00:00', 'YYYY-MM-DD HH:mm:ss', 'Europe/Rome');
     d.set(15, 'hour');
-    expect(d.hourUTC).toBe(15);
+    // 15:00 local, which on CEST is 13:00 UTC — the offset is applied for
+    // the caller rather than left for them to subtract.
+    expect(d.hour).toBe(15);
+    expect(d.hourUTC).toBe(13);
     expect(d.toString()).toBe(intlRead(d.timestamp, 'Europe/Rome'));
   });
 });

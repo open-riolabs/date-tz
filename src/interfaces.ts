@@ -130,6 +130,10 @@ export interface IDateTz {
   readonly hour?: number;
   /** The minute component of the date (0-59). */
   readonly minute?: number;
+  /** The second component of the date (0-59). */
+  readonly second?: number;
+  /** The millisecond component of the date (0-999). */
+  readonly millisecond?: number;
   /** The day of the week (0-6, where 0 is Sunday). */
   readonly dayOfWeek?: number;
   /** The year component of the date (UTC). */
@@ -142,6 +146,10 @@ export interface IDateTz {
   readonly hourUTC?: number;
   /** The minute component of the date (0-59, UTC). */
   readonly minuteUTC?: number;
+  /** The second component of the date (0-59, UTC). */
+  readonly secondUTC?: number;
+  /** The millisecond component of the date (0-999, UTC). */
+  readonly millisecondUTC?: number;
   /** The day of the week (0-6, where 0 is Sunday, UTC). */
   readonly dayOfWeekUTC?: number;
   /** Checks if the current year is a leap year. */

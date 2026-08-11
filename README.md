@@ -51,6 +51,8 @@ Both properties are writable; assigning to either re-resolves `timezoneOffset` a
 | `day`             | `number`  | Day of month 1–31 in the instance's timezone.  |
 | `hour`            | `number`  | Hour 0–23 in the instance's timezone.          |
 | `minute`          | `number`  | Minute 0–59 in the instance's timezone.        |
+| `second`          | `number`  | Second 0–59 in the instance's timezone.        |
+| `millisecond`     | `number`  | Millisecond 0–999 in the instance's timezone.  |
 | `dayOfWeek`       | `number`  | Day of week 0–6 (0 = Sunday) in the timezone.  |
 | `timezoneOffset`  | `number`  | Current offset from UTC in **milliseconds**.   |
 | `isDst`           | `boolean` | Whether the clock is ahead of the zone's standard offset. See [Timezone data](#timezone-data). |
@@ -58,7 +60,7 @@ Both properties are writable; assigning to either re-resolves `timezoneOffset` a
 
 ### UTC equivalents
 
-`yearUTC`, `monthUTC`, `dayUTC`, `hourUTC`, `minuteUTC`, `dayOfWeekUTC` — same semantics as above, but always in UTC.
+`yearUTC`, `monthUTC`, `dayUTC`, `hourUTC`, `minuteUTC`, `secondUTC`, `millisecondUTC`, `dayOfWeekUTC` — same semantics as above, but always in UTC.
 
 ---
 
@@ -98,17 +100,49 @@ Names follow the wall clock the instance resolved, so they always agree with the
 
 ### `add(value: number, unit): this`
 
-Adds time to the instance in place. Normalises overflow (minutes → hours → days, etc.).
+Adds time to the instance in place. Accepts negative values.
 
 **Units:** `millisecond` | `second` | `minute` | `hour` | `day` | `month` | `year`
+
+The unit decides what "adding" means:
+
+- **Time units** — `millisecond`, `second`, `minute`, `hour` — move the **instant**. An hour is always 3600 seconds, whatever the calendar does around it.
+- **Calendar units** — `day`, `month`, `year` — move the **local wall clock**. Adding a day lands on the same clock time tomorrow, even when a DST transition makes that day 23 or 25 hours long.
+
+```ts
+const d = DateTz.parse('2025-03-29 12:00:00', 'YYYY-MM-DD HH:mm:ss', 'Europe/Rome');
+
+d.add(1, 'day').toString();    // '2025-03-30 12:00:00'  — 23 real hours later
+d.add(24, 'hour').toString();  // '2025-03-30 13:00:00'  — exactly 24 hours later
+```
+
+Adding months or years **clamps to the end of the target month** instead of spilling into the next one:
+
+```ts
+DateTz.parse('2026-01-31', 'YYYY-MM-DD').add(1, 'month').toString('YYYY-MM-DD');  // '2026-02-28'
+DateTz.parse('2024-02-29', 'YYYY-MM-DD').add(1, 'year').toString('YYYY-MM-DD');   // '2025-02-28'
+```
+
+Day arithmetic still carries normally: `add(40, 'day')` crosses into the next month.
+
+Landing on a wall clock a DST transition skipped or repeated resolves the same way [`parse`](#dst-transitions) does.
 
 ---
 
 ### `set(value: number, unit): this`
 
-Sets a specific date/time component.
+Sets a component of the **local wall clock** — the value a reader in that timezone would see.
 
 **Units:** `year` | `month` | `day` | `hour` | `minute` | `second` | `millisecond`
+
+```ts
+const d = new DateTz(Date.UTC(2026, 6, 15, 22, 0, 0), 'Asia/Tokyo');  // 2026-07-16 07:00 local
+d.set(9, 'hour').toString();   // '2026-07-16 09:00:00'
+```
+
+`month` is **1-based** here (pass `6` for June), unlike the zero-based `month` getter. A day the target month does not have is pulled back to the last one it does, matching `add`.
+
+> **Changed in 1.x.** `add` and `set` used to operate on the UTC wall clock. `set(9, 'hour')` assigned 09:00 **UTC**, which for a zone far from UTC could move the local date to another day; `add(1, 'day')` added exactly 24 hours, shifting the local clock across a DST boundary. Both now work in the instance's own timezone. `stripSecMillis` likewise truncates the local clock.
 
 ---
 

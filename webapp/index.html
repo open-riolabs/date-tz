@@ -22,6 +22,7 @@
       <a href="#format">Format</a>
       <a href="#convert">Convert</a>
       <a href="#manipulate">Manipulate</a>
+      <a href="#tzdata">Timezone data</a>
     </nav>
   </header>
 
@@ -138,25 +139,35 @@
 
       <details class="tokens">
         <summary>Format tokens reference</summary>
+        <p class="note">
+          <code>toString</code> and <code>parse</code> share one vocabulary. The last column
+          says what <code>parse</code> does with each token reading the string back.
+        </p>
         <table>
-          <thead><tr><th>Token</th><th>Meaning</th></tr></thead>
+          <thead><tr><th>Token</th><th>Meaning</th><th>Read back by <code>parse</code></th></tr></thead>
           <tbody>
-            <tr><td><code>YYYY</code> / <code>yyyy</code></td><td>Full year</td></tr>
-            <tr><td><code>YY</code> / <code>yy</code></td><td>2-digit year</td></tr>
-            <tr><td><code>MM</code></td><td>Month 01–12</td></tr>
-            <tr><td><code>LM</code></td><td>Long month name (locale)</td></tr>
-            <tr><td><code>SM</code></td><td>Short month name (locale)</td></tr>
-            <tr><td><code>DD</code></td><td>Day of month 01–31</td></tr>
-            <tr><td><code>HH</code></td><td>Hour 00–23</td></tr>
-            <tr><td><code>hh</code></td><td>Hour 01–12 (needs <code>aa</code>/<code>AA</code>)</td></tr>
-            <tr><td><code>mm</code></td><td>Minute</td></tr>
-            <tr><td><code>ss</code></td><td>Second</td></tr>
-            <tr><td><code>aa</code> / <code>AA</code></td><td>am/pm — AM/PM</td></tr>
-            <tr><td><code>WL</code></td><td>Long weekday name</td></tr>
-            <tr><td><code>WS</code></td><td>Short weekday name</td></tr>
-            <tr><td><code>tz</code></td><td>Timezone identifier</td></tr>
+            <tr><td><code>YYYY</code> / <code>yyyy</code></td><td>Full year</td><td>yes</td></tr>
+            <tr><td><code>YY</code> / <code>yy</code></td><td>2-digit year</td><td>yes, as 1970–2069</td></tr>
+            <tr><td><code>MM</code></td><td>Month 01–12</td><td>yes</td></tr>
+            <tr><td><code>LM</code></td><td>Long month name (locale)</td><td><strong>no</strong> — throws</td></tr>
+            <tr><td><code>SM</code></td><td>Short month name (locale)</td><td><strong>no</strong> — throws</td></tr>
+            <tr><td><code>DD</code></td><td>Day of month 01–31</td><td>yes</td></tr>
+            <tr><td><code>HH</code></td><td>Hour 00–23</td><td>yes</td></tr>
+            <tr><td><code>hh</code></td><td>Hour 01–12 (needs <code>aa</code>/<code>AA</code>)</td><td>yes</td></tr>
+            <tr><td><code>mm</code></td><td>Minute</td><td>yes</td></tr>
+            <tr><td><code>ss</code></td><td>Second</td><td>yes</td></tr>
+            <tr><td><code>aa</code> / <code>AA</code></td><td>am/pm — AM/PM</td><td>yes</td></tr>
+            <tr><td><code>WL</code></td><td>Long weekday name</td><td>matched, ignored</td></tr>
+            <tr><td><code>WS</code></td><td>Short weekday name</td><td>matched, ignored</td></tr>
+            <tr><td><code>tz</code></td><td>Timezone identifier</td><td>matched, ignored</td></tr>
           </tbody>
         </table>
+        <p class="note">
+          Month names need the locale they were written in, which <code>parse</code> is not given,
+          so it throws rather than guess at a language — use <code>MM</code> for anything you
+          intend to read back. <code>parse</code> requires the whole string to match the whole
+          pattern: separators are literal, numbers must be padded, trailing text is rejected.
+        </p>
       </details>
     </section>
 
@@ -199,6 +210,17 @@
         <p>Chain <code>add</code> / <code>set</code> operations and watch the timestamp evolve.</p>
       </header>
 
+      <p class="note">
+        <strong>Time units</strong> (<code>millisecond</code>, <code>second</code>, <code>minute</code>,
+        <code>hour</code>) move the instant — an hour is always 3600 seconds.
+        <strong>Calendar units</strong> (<code>day</code>, <code>month</code>, <code>year</code>) move the
+        local wall clock, so adding a day keeps the clock time even when a DST transition makes that day
+        23 or 25 hours long. Try <code>2025-03-29 12:00:00</code> in <code>Europe/Rome</code>:
+        <code>add(1, 'day')</code> lands on 12:00, <code>add(24, 'hour')</code> on 13:00.
+        Months and years clamp to the end of the target month — 31 January plus one month is 28 February.
+        <code>set</code> assigns the component a reader in that timezone would see.
+      </p>
+
       <div class="form-row">
         <label class="grow">
           <span>Base date string</span>
@@ -239,6 +261,37 @@
 
       <div class="result" id="manResult"></div>
       <ol class="history" id="manHistory"></ol>
+    </section>
+
+    <!-- ──────────────── TIMEZONE DATA ──────────────── -->
+    <section id="tzdata" class="card">
+      <header class="card-head">
+        <h2>Timezone data</h2>
+        <p>Where the offsets on this page actually come from — and what to do when they are stale.</p>
+      </header>
+
+      <p class="note">
+        <code>DateTz</code> ships no timezone data of its own. Offsets are read from
+        <strong>your browser's</strong> copy of the IANA database, so what you see here depends on
+        your browser, not on the version of the library. When a country changes its rules, a browser
+        that has not been updated keeps returning the old offset — and nothing the library does from
+        the outside can fix that. A <code>TzProvider</code> can.
+      </p>
+
+      <h3 class="sub">Morocco, 20 September 2026</h3>
+      <p class="note">
+        Morocco abolished daylight saving time at 02:00 local on 2026-09-20, settling on permanent
+        UTC+0 and dropping the Ramadan pause that made it the only zone in the world switching on a
+        lunar schedule. The change covers <code>Africa/Casablanca</code> and
+        <code>Africa/El_Aaiun</code>. Your browser's verdict:
+      </p>
+
+      <div class="form-row">
+        <div class="grow" id="tzProbe">—</div>
+        <button id="tzOverrideBtn" class="primary">Install override</button>
+      </div>
+
+      <div class="result" id="tzdataResult"></div>
     </section>
   </main>
 

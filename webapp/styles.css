@@ -126,6 +126,20 @@ button.ghost:hover { color: var(--text); background: var(--panel-2); }
 .tile .tz-del:hover { color: var(--bad); }
 .chip { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 10px; font-weight: 600; }
 .chip.dst { background: rgba(246, 176, 92, .15); color: var(--warn); }
+/* bare .chip carries no colour of its own, so give it the neutral/ok one */
+.form-row .chip:not(.dst) { background: rgba(91, 214, 161, .15); color: var(--good); }
+
+/* ───── explanatory prose inside a card ───── */
+.note {
+  color: var(--muted); font-size: 13px; line-height: 1.65;
+  margin: 0 0 14px; max-width: 78ch;
+}
+.note strong { color: var(--text); font-weight: 600; }
+.tokens .note { margin: 10px 0 0; }
+h3.sub {
+  margin: 20px 0 8px; font-size: 13px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .6px; color: var(--text);
+}
 
 /* ───── result ───── */
 .result {

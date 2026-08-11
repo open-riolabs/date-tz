@@ -148,6 +148,23 @@ function normalize(parts: DateParts): DateParts {
   return parts;
 }
 
+/**
+ * Settles month overflow into the year, then pulls the day back to the last
+ * one the target month has.
+ *
+ * Calendar arithmetic on a month or a year is the one place where carrying
+ * the overflow forward is wrong: 31 January plus one month is understood as
+ * the end of February, not as the 3rd of March. Every other unit still
+ * carries, so adding 40 days does cross into the next month.
+ */
+function clampToMonthEnd(parts: DateParts): void {
+  parts.year += Math.floor(parts.month / 12);
+  parts.month = ((parts.month % 12) + 12) % 12;
+
+  const lastDay = daysInMonthOf(parts.year, parts.month);
+  if (parts.day > lastDay) parts.day = lastDay;
+}
+
 /** Rebuilds a millisecond count since the epoch from calendar components. */
 function compose(parts: DateParts): number {
   if (parts.year < epochYear) throw new Error(BEFORE_EPOCH);
@@ -322,8 +339,17 @@ export class DateTz implements IDateTz {
   }
 
   /**
- * Adds a specified amount of time to the DateTz instance.
- * Arithmetic is performed on the UTC timestamp.
+ * Adds a specified amount of time to the DateTz instance, in place.
+ *
+ * Time units — milliseconds through hours — move the instant itself: an
+ * hour is always 3600 seconds, whatever the calendar does around it.
+ * Calendar units — days, months, years — move the local wall clock, so
+ * adding a day lands on the same clock time tomorrow even when a DST
+ * transition makes that day 23 or 25 hours long.
+ *
+ * Adding months or years clamps to the end of the target month rather than
+ * spilling into the next one: 31 January plus one month is 28 February.
+ *
  * @param value - The amount of time to add. May be negative.
  * @param unit - The unit of time.
  * @returns The updated DateTz instance.
@@ -332,36 +358,54 @@ export class DateTz implements IDateTz {
   add(value: number, unit: 'millisecond' | 'second' | 'minute' | 'hour' | 'day' | 'month' | 'year'): this {
     if (!Number.isFinite(value)) throw new Error(`Invalid value: ${value}`);
 
-    const parts = decompose(this._timestamp);
-
     switch (unit) {
       case 'millisecond':
-        parts.millisecond += value;
-        break;
+        this.timestamp = this._timestamp + value;
+        return this;
       case 'second':
-        parts.second += value;
-        break;
+        this.timestamp = this._timestamp + value * 1000;
+        return this;
       case 'minute':
-        parts.minute += value;
-        break;
+        this.timestamp = this._timestamp + value * MS_PER_MINUTE;
+        return this;
       case 'hour':
-        parts.hour += value;
-        break;
+        this.timestamp = this._timestamp + value * MS_PER_HOUR;
+        return this;
+    }
+
+    const parts = this.parts(true);
+
+    switch (unit) {
       case 'day':
         parts.day += value;
         break;
       case 'month':
         parts.month += value;
+        clampToMonthEnd(parts);
         break;
       case 'year':
         parts.year += value;
+        clampToMonthEnd(parts);
         break;
       default:
         throw new Error(`Unsupported unit: ${unit}`);
     }
 
-    this.timestamp = compose(normalize(parts));
+    this.setLocalParts(parts);
     return this;
+  }
+
+  /**
+   * Re-anchors the instance on a local wall clock.
+   *
+   * The wall clock is resolved back to an instant through the same
+   * disambiguation `parse` uses, so arithmetic that lands on an hour a DST
+   * transition skipped or repeated settles the same way a parsed literal
+   * would.
+   */
+  private setLocalParts(parts: DateParts): void {
+    const localAsUtc = compose(normalize(parts));
+    this.timestamp = localAsUtc - getOffsetSeconds(localAsUtc, this._timezone) * 1000;
   }
 
   /**
@@ -393,24 +437,31 @@ export class DateTz implements IDateTz {
   }
 
   /**
-   * Strips seconds and milliseconds from the timestamp.
+   * Strips seconds and milliseconds from the local wall clock.
    * @returns The updated DateTz instance.
    */
   public stripSecMillis(): this {
-    const parts = decompose(this._timestamp);
+    const parts = this.parts(true);
     parts.second = 0;
     parts.millisecond = 0;
-    this.timestamp = compose(parts);
+    this.setLocalParts(parts);
     return this;
   }
 
   /**
-  * Sets a specific component of the date or time.
-  * The component is applied to the UTC timestamp.
-  * @param value - The value to set.
+  * Sets a component of the local wall clock, in place.
+  *
+  * The component is the one a reader in this timezone would see, so
+  * `set(9, 'hour')` produces 09:00 local, whatever the offset is.
+  *
+  * A day that the target month does not have is pulled back to the last one
+  * it does: setting February on the 31st lands on the 28th, or the 29th in a
+  * leap year.
+  *
+  * @param value - The value to set. Months are 1-based, unlike the getter.
   * @param unit - The unit to set.
   * @returns The updated DateTz instance.
-  * @throws Error if the unit is unsupported.
+  * @throws Error if the unit is unsupported or the value out of range.
   */
   set(value: number, unit: 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second' | 'millisecond'): this {
 
@@ -421,17 +472,20 @@ export class DateTz implements IDateTz {
     if (unit === 'second' && (value < 0 || value > 59)) throw new Error(`Invalid second: ${value}`);
     if (unit === 'millisecond' && (value < 0 || value > 999)) throw new Error(`Invalid millisecond: ${value}`);
 
-    const parts = decompose(this._timestamp);
+    const parts = this.parts(true);
 
     switch (unit) {
       case 'year':
         parts.year = value;
+        clampToMonthEnd(parts);
         break;
       case 'month':
         parts.month = value - 1;
+        clampToMonthEnd(parts);
         break;
       case 'day':
         parts.day = value;
+        clampToMonthEnd(parts);
         break;
       case 'hour':
         parts.hour = value;
@@ -449,7 +503,7 @@ export class DateTz implements IDateTz {
         throw new Error(`Unsupported unit: ${unit}`);
     }
 
-    this.timestamp = compose(normalize(parts));
+    this.setLocalParts(parts);
     return this;
   }
 
@@ -521,6 +575,34 @@ export class DateTz implements IDateTz {
   */
   get minuteUTC() {
     return this.parts(false).minute;
+  }
+
+  /**
+  * Gets the second component of the time.
+  */
+  get second() {
+    return this.parts(true).second;
+  }
+
+  /**
+  * Gets the second UTC component of the time.
+  */
+  get secondUTC() {
+    return this.parts(false).second;
+  }
+
+  /**
+  * Gets the millisecond component of the time.
+  */
+  get millisecond() {
+    return this.parts(true).millisecond;
+  }
+
+  /**
+  * Gets the millisecond UTC component of the time.
+  */
+  get millisecondUTC() {
+    return this.parts(false).millisecond;
   }
 
   /**
