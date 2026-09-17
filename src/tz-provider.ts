@@ -1,4 +1,5 @@
 import { TzInfo, TzProvider } from "./interfaces";
+import { TzExceptions } from "./tz-exceptions";
 
 const MS_PER_DAY = 86400000;
 
@@ -89,9 +90,17 @@ function standardOffsetMinutes(timezone: string, year: number): number {
  * January the DST period. `isDst` here answers the question users actually
  * ask — is this clock ahead of the zone's winter offset — and so reports
  * summer, not January.
+ *
+ * Registered {@link TzExceptions} answer before the runtime does. They carry
+ * rule changes the runtime's database has not caught up with, and they state
+ * DST outright, which also settles the year a zone re-bases its offset. Any
+ * provider that delegates here inherits them; one that does not answers on
+ * its own.
  */
 export const intlTzProvider: TzProvider = {
   offsetAt(timestamp: number, timezone: string): TzInfo {
+    const exception = TzExceptions.find(timestamp, timezone);
+    if (exception) return { offset: exception.offset, isDst: exception.isDst };
     if (timezone === 'UTC' || timezone === 'Etc/UTC') return { offset: 0, isDst: false };
 
     const offset = intlOffsetMinutes(timestamp, timezone);

@@ -5,3 +5,4 @@ export * from './date-tz';
 export { IDateTz, TzInfo, TzProvider } from './interfaces';
 export * from './tz-provider';
 export * from './tz-overrides';
+export * from './tz-exceptions';

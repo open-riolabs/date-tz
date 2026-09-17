@@ -21,6 +21,7 @@ Re-run `webapp:build` whenever the `DateTz` sources change.
 - **Format DateTz → string** — `date.toString(pattern, locale)` with a token reference.
 - **Cross-timezone view** — one instant seen through `cloneToTimezone` across multiple zones.
 - **Manipulate** — chain `add`, `set`, `stripSecMillis`, `setTimezone`, `cloneToTimezone` with a history log.
+- **Timezone data** — the `TzExceptions` registry: its `toString()` dump, `register` / `unregister` / `reset` / `clear`, and your browser's own offsets next to what `DateTz` resolves for each exception.
 
 ## Structure
 

@@ -242,6 +242,31 @@ function sortDates(a: IDateTz, b: IDateTz): number {
 
 ---
 
+## `TzExceptions` – rule changes the runtime does not know yet
+
+Offsets come from the runtime's copy of the IANA database, which can lag months behind a change in the law. Never correct dates by hand: register the new rule once, at startup, before any date is created. Every `DateTz` then follows it — construction, `parse`, `add` and `set` included.
+
+```typescript
+import { DateTz, TzExceptions } from 'date-tz';
+
+TzExceptions.register({
+  timezone: 'America/Edmonton',
+  // Bounds are UTC instants: from is inclusive, to is exclusive, both optional.
+  from: DateTz.parse('2026-11-01 08:00:00', 'YYYY-MM-DD HH:mm:ss', 'Etc/UTC').timestamp,
+  offset: -360,   // minutes east of UTC, signed: -360 is UTC-6
+  isDst: false,   // summer time (true) or standard time (false)
+  description: 'Alberta: permanent UTC-6',
+});
+
+console.log(TzExceptions.toString()); // one line per registered exception
+```
+
+- Morocco and Western Sahara (UTC+0 from 2026-09-20) and British Columbia (UTC-7 from 2026-11-01) are **preloaded**.
+- Exceptions for the same zone may not overlap: call `TzExceptions.unregister(zone)` before registering a replacement.
+- `TzExceptions.reset()` restores the preloaded set; `TzExceptions.clear()` removes every exception.
+
+---
+
 ## Full worked example
 
 ```typescript

@@ -270,31 +270,76 @@
     <section id="tzdata" class="card">
       <header class="card-head">
         <h2>Timezone data</h2>
-        <p>Where the offsets on this page actually come from — and what to do when they are stale.</p>
+        <p>Where the offsets on this page actually come from — and how exceptions correct them when they are stale.</p>
       </header>
 
       <p class="note">
         <code>DateTz</code> ships no timezone data of its own. Offsets are read from
         <strong>your browser's</strong> copy of the IANA database, so what you see here depends on
         your browser, not on the version of the library. When a country changes its rules, a browser
-        that has not been updated keeps returning the old offset — and nothing the library does from
-        the outside can fix that. A <code>TzProvider</code> can.
+        that has not been updated keeps returning the old offset. <code>TzExceptions</code> states the
+        new rule directly: the default provider consults it before the browser, so every panel on this
+        page follows a registered exception.
       </p>
 
-      <h3 class="sub">Morocco, 20 September 2026</h3>
+      <h3 class="sub">Registered exceptions</h3>
       <p class="note">
-        Morocco abolished daylight saving time at 02:00 local on 2026-09-20, settling on permanent
-        UTC+0 and dropping the Ramadan pause that made it the only zone in the world switching on a
-        lunar schedule. The change covers <code>Africa/Casablanca</code> and
-        <code>Africa/El_Aaiun</code>. Your browser's verdict:
+        Printed by <code>TzExceptions.toString()</code>. Morocco (20 September 2026, permanent UTC+0,
+        Western Sahara included) and British Columbia (1 November 2026, permanent UTC-7) come preloaded.
+        Ranges read as intervals — <code>[</code> includes its bound, <code>)</code> excludes it — and
+        instants are in UTC.
       </p>
-
+      <pre class="result" id="excDump">—</pre>
       <div class="form-row">
-        <div class="grow" id="tzProbe">—</div>
-        <button id="tzOverrideBtn" class="primary">Install override</button>
+        <button id="excReset" class="ghost">reset()</button>
+        <button id="excClear" class="ghost">clear()</button>
       </div>
 
-      <div class="result" id="tzdataResult"></div>
+      <h3 class="sub">Your browser versus the exceptions</h3>
+      <p class="note">
+        For each exception, the offset your browser's own database reports at an instant the exception
+        covers, next to what <code>DateTz</code> resolves. A browser that disagrees is stale; the
+        exception wins either way.
+      </p>
+      <div class="result" id="excCompare">—</div>
+
+      <h3 class="sub">Register an exception</h3>
+      <p class="note">
+        <code>offset</code> is in minutes east of UTC, signed. Bounds are UTC: <code>from</code> is
+        included, <code>to</code> excluded, and leaving one empty leaves that side open. Exceptions for
+        the same zone may not overlap — unregister the zone first to replace one.
+      </p>
+      <div class="form-row">
+        <label>
+          <span>Timezone</span>
+          <input id="excTz" list="tzList" value="America/Edmonton" />
+        </label>
+        <label>
+          <span>From · UTC</span>
+          <input id="excFrom" type="datetime-local" value="2026-11-01T08:00" />
+        </label>
+        <label>
+          <span>To · UTC</span>
+          <input id="excTo" type="datetime-local" />
+        </label>
+        <label>
+          <span>Offset (min)</span>
+          <input id="excOffset" type="number" value="-360" />
+        </label>
+        <label class="check">
+          <input id="excDst" type="checkbox" />
+          <span>isDst</span>
+        </label>
+      </div>
+      <div class="form-row">
+        <label class="grow">
+          <span>Description</span>
+          <input id="excDesc" value="Alberta: permanent UTC-6 (tzdata 2026c)" />
+        </label>
+        <button id="excRegister" class="primary">register()</button>
+        <button id="excUnregister" class="ghost">unregister(timezone)</button>
+      </div>
+      <div class="result" id="excResult">—</div>
     </section>
   </main>
 

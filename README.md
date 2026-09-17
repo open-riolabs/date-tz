@@ -10,6 +10,24 @@ A lightweight TypeScript date-time utility with full timezone support, custom fo
 import { DateTz } from '@open-rlb/date-tz';
 ```
 
+### Entry points
+
+The root entry point re-exports everything you normally need, and is the one to prefer:
+
+```ts
+import { DateTz, IDateTz, getTzProvider, setTzProvider } from '@open-rlb/date-tz';
+```
+
+Single modules stay reachable as subpaths, with or without the `.js` extension — both forms
+resolve under Node's ESM loader as well as under a bundler:
+
+```ts
+import { DateTz } from '@open-rlb/date-tz/date-tz';     // '.../date-tz.js' works too
+```
+
+Available subpaths: `date-tz`, `interfaces`, `tz-provider`, `tz-exceptions`, `tz-overrides`,
+`canonical-link`, `helpers`.
+
 ---
 
 ## Constructor
@@ -318,7 +336,7 @@ Check what a runtime carries:
 node -p "process.versions.tz"
 ```
 
-When a country changes its rules, an outdated runtime keeps returning the old offset for dates after the change, and there is nothing this package can do about it from the outside. That is what the provider below is for.
+When a country changes its rules, an outdated runtime keeps returning the old offset for dates after the change. Nothing this package does can update the runtime's database: a new one arrives only with a Node release, a browser update or an operating system image, often months after the change takes effect. [Timezone exceptions](#timezone-exceptions) close that gap by stating the new rule directly, and a [provider](#tzprovider) replaces the rules wholesale.
 
 ### How `isDst` is decided
 
@@ -328,6 +346,84 @@ Two consequences worth knowing:
 
 - **Europe/Dublin** models winter as *negative* DST off a standard of UTC+1, so IANA would call January its DST period. This library reports summer instead — the question users actually mean.
 - **Africa/Casablanca** ran on UTC+1 year-round with a pause at UTC+0 for Ramadan, so before 2026-09-20 the pause reads as standard time and the rest of the year as DST.
+
+For the instants a [timezone exception](#timezone-exceptions) covers, `isDst` is whatever the exception states, not the calculation above.
+
+### Timezone exceptions
+
+`TzExceptions` is a static registry of rule changes the runtime may not know yet. The default provider consults it **before** the runtime, so every date — constructed, parsed, or moved by `add` and `set` — follows a registered exception without any other call.
+
+#### Preloaded exceptions
+
+| Zone                | From (UTC)             | At the change, local time                  | Offset | `isDst` | Source       |
+| ------------------- | ---------------------- | ------------------------------------------ | ------ | ------- | ------------ |
+| `Africa/Casablanca` | `2026-09-20T01:00:00Z` | 02:00 on UTC+1; clocks go back to 01:00    | UTC+0  | `false` | tzdata 2026c |
+| `Africa/El_Aaiun`   | `2026-09-20T01:00:00Z` | as in Morocco (Western Sahara)             | UTC+0  | `false` | tzdata 2026c |
+| `America/Vancouver` | `2026-11-01T09:00:00Z` | 02:00 on UTC-7; clocks no longer fall back | UTC-7  | `false` | tzdata 2026b |
+
+**Morocco** abolished daylight saving time, settling on permanent UTC+0 and dropping the Ramadan pause. Announcements citing 21 September refer to the first full day on the new offset.
+
+**British Columbia** made its 2026-03-08 spring forward the last clock change and stays on UTC-7 year-round. The change legally took effect on 2026-03-09; like tzdata, the exception starts on 2026-11-01 at 02:00, the first instant at which the clock would otherwise have differed. From then on UTC-7 is the zone's **standard** time — tzdata abbreviates it `MST` — so `isDst` is `false`, including for the rest of 2026, where the yearly calculation would still see January's UTC-8.
+
+The exceptions apply whether or not the runtime already carries the rule; where it does, the two agree.
+
+#### Registering an exception
+
+Register exceptions where the application starts, **before** creating dates: an instance resolves its offset when its instant or zone changes, and does not revisit it otherwise.
+
+```ts
+import { DateTz, TzExceptions } from '@open-rlb/date-tz';
+
+TzExceptions.register({
+  timezone: 'America/Edmonton',
+  from: DateTz.parse('2026-11-01 08:00:00', 'YYYY-MM-DD HH:mm:ss', 'Etc/UTC').timestamp,
+  offset: -360,   // minutes east of UTC, signed
+  isDst: false,
+  description: 'Alberta: permanent UTC-6 (tzdata 2026c)',
+});
+
+console.log(`${TzExceptions}`);
+```
+
+```text
+TzExceptions: 4 exceptions registered
+  Africa/Casablanca  [2026-09-20T01:00:00Z, +inf)  UTC+00:00  standard  Morocco abolishes DST: permanent UTC+0 (tzdata 2026c)
+  Africa/El_Aaiun    [2026-09-20T01:00:00Z, +inf)  UTC+00:00  standard  Western Sahara follows Moroccan clocks: permanent UTC+0 (tzdata 2026c)
+  America/Edmonton   [2026-11-01T08:00:00Z, +inf)  UTC-06:00  standard  Alberta: permanent UTC-6 (tzdata 2026c)
+  America/Vancouver  [2026-11-01T09:00:00Z, +inf)  UTC-07:00  standard  British Columbia stops changing clocks: permanent UTC-7 (tzdata 2026b)
+```
+
+Ranges read as intervals: `[` includes its bound, `)` excludes it, and instants are in UTC.
+
+| Field         | Type      | Meaning |
+| ------------- | --------- | ------- |
+| `timezone`    | `string`  | IANA identifier. Aliases resolve as `DateTz` resolves them, so `Canada/Pacific` covers `America/Vancouver`. |
+| `from`        | `number?` | First instant covered, in ms since the epoch, **inclusive**. Omit it for no start. |
+| `to`          | `number?` | First instant no longer covered, in ms since the epoch, **exclusive**. Omit it for no end. |
+| `offset`      | `number`  | Minutes east of UTC, **signed**: `-420` is UTC-7, `330` is UTC+5:30. It replaces the runtime's offset rather than adjusting it. |
+| `isDst`       | `boolean` | Summer time (`true`) or standard time (`false`). |
+| `description` | `string?` | A label, printed by `toString()`. |
+
+State bounds in UTC, as above: a local wall clock at the moment of a transition is ambiguous by nature.
+
+| Method | Description |
+| ------ | ----------- |
+| `register(exception): boolean` | Adds an exception. Returns `false`, changing nothing, when an identical one is already registered. |
+| `unregister(timezone): boolean` | Removes every exception for a zone, preloaded ones included. Returns `false` when there were none. |
+| `clear(): void` | Removes every exception, preloaded ones included. |
+| `reset(): void` | Restores the preloaded exceptions, dropping everything else. |
+| `find(timestamp, timezone): TzException \| undefined` | The exception covering an instant, matched against the identifier a `DateTz` reports. |
+| `list(): TzException[]` | Every exception, sorted by zone and start. Entries are frozen. |
+| `toString(): string` | One line per exception, for debugging. `String(TzExceptions)` prints the same. |
+
+Exceptions for the same zone **may not overlap**, so what the registry answers never depends on the order of registration. To replace one, preloaded ones included, unregister its zone and register the new rule:
+
+```ts
+// Hand British Columbia back to the runtime once every host runs tzdata 2026b or later.
+TzExceptions.unregister('America/Vancouver');
+```
+
+The registry lives inside the default provider, `intlTzProvider`. A custom provider that delegates to it, like the one below, inherits the exceptions; one that answers on its own replaces them along with the runtime's rules.
 
 ### `TzProvider`
 
@@ -348,19 +444,11 @@ setTzProvider(null);   // restore the runtime's rules
 
 Install a provider **before** constructing dates: an instance resolves its offset on construction and does not revisit it.
 
-### Morocco's move to permanent UTC+0
+### `installMoroccoOverride()` (deprecated)
 
-Morocco abolished daylight saving time on **2026-09-20 at 02:00 local**, settling on permanent UTC+0 and dropping the Ramadan pause. The change applies to `Africa/Casablanca` and `Africa/El_Aaiun` (Western Sahara). Announcements citing 21 September refer to the first full day on the new offset.
+Before timezone exceptions existed, Morocco's change was corrected by installing a provider: `installMoroccoOverride()` wrapped the active one on a runtime that did not know the rule, and `withMoroccoOverride()` built the wrapper. Both still work, and are safe to call, but the preloaded exception already applies the rule, so there is nothing left to install. `runtimeKnowsMoroccoChange()` still reports whether the runtime itself carries the rule.
 
-Runtimes shipping a timezone database older than that release still resolve Moroccan dates after the transition to UTC+1. `installMoroccoOverride()` corrects them:
-
-```ts
-import { installMoroccoOverride, runtimeKnowsMoroccoChange } from '@open-rlb/date-tz';
-
-installMoroccoOverride();   // true if the correction was needed and applied
-```
-
-It is **self-cancelling**: on a runtime that already carries the rule it installs nothing and returns `false`, so it never fights a database that has since learned the real rule. Calling it more than once is safe. Use `runtimeKnowsMoroccoChange()` to inspect the runtime directly.
+> **Changed in 1.x.** Dates in `Africa/Casablanca` and `Africa/El_Aaiun` from 2026-09-20, and in `America/Vancouver` from 2026-11-01, follow the new rules by default, whatever timezone database the host ships. `installMoroccoOverride()` and `withMoroccoOverride()` are deprecated.
 
 ---
 
@@ -374,6 +462,8 @@ It is **self-cancelling**: on a runtime that already carries the rule it install
 | Instant before 1970-01-01, in UTC or local time | Throws `Error`   |
 | Non-finite `timestamp`, or non-finite `add` amount | Throws `Error` |
 | Ambiguous or skipped wall clock at a DST transition | Resolved with the pre-transition offset (see above) |
+| `TzExceptions.register` with an unknown zone, an invalid offset, bound, `isDst` or description, or `from` not before `to` | Throws `Error` |
+| `TzExceptions.register` overlapping an exception for the same zone | Throws `Error`; an identical one returns `false` |
 
 ---
 

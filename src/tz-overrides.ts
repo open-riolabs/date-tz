@@ -59,6 +59,8 @@ const wrapped = new WeakSet<TzProvider>();
  *
  * @param base - The provider to wrap. Defaults to the installed one.
  * @returns The wrapped provider, or `base` when the correction is redundant.
+ * @deprecated Morocco's change is a preloaded {@link TzExceptions} rule, so
+ * the default provider already applies it. Kept for compatibility.
  */
 export function withMoroccoOverride(base: TzProvider = getTzProvider()): TzProvider {
   if (wrapped.has(base) || runtimeKnowsMoroccoChange()) return base;
@@ -86,6 +88,8 @@ export function withMoroccoOverride(base: TzProvider = getTzProvider()): TzProvi
  *
  * @returns True when the correction was installed, false when it was already
  * in place or the runtime already knew the rule.
+ * @deprecated Morocco's change is a preloaded {@link TzExceptions} rule, so
+ * there is nothing left to install. Kept for compatibility.
  */
 export function installMoroccoOverride(): boolean {
   const base = getTzProvider();

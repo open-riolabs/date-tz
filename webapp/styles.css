@@ -54,6 +54,8 @@ a:hover { text-decoration: underline; }
 /* ───── layout ───── */
 main { max-width: 1200px; margin: 0 auto; padding: 28px 24px 80px; display: grid; gap: 24px; }
 .card {
+  /* Grid items default to their content's width; this lets wide content scroll inside instead. */
+  min-width: 0;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -72,6 +74,8 @@ main { max-width: 1200px; margin: 0 auto; padding: 28px 24px 80px; display: grid
 .form-row label { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; }
 .form-row label.grow { flex: 1 1 260px; }
 .form-row span { font-size: 11px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); font-weight: 600; }
+.form-row label.check { flex-direction: row; align-items: center; gap: 8px; padding-bottom: 10px; }
+.form-row label.check input { width: 16px; height: 16px; padding: 0; accent-color: var(--accent); }
 input, select, button {
   background: var(--bg-soft);
   border: 1px solid var(--border);
@@ -126,8 +130,8 @@ button.ghost:hover { color: var(--text); background: var(--panel-2); }
 .tile .tz-del:hover { color: var(--bad); }
 .chip { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 10px; font-weight: 600; }
 .chip.dst { background: rgba(246, 176, 92, .15); color: var(--warn); }
-/* bare .chip carries no colour of its own, so give it the neutral/ok one */
-.form-row .chip:not(.dst) { background: rgba(91, 214, 161, .15); color: var(--good); }
+.chip.ok { background: rgba(91, 214, 161, .15); color: var(--good); }
+.chip.stale { background: rgba(246, 176, 92, .15); color: var(--warn); }
 
 /* ───── explanatory prose inside a card ───── */
 .note {
@@ -148,6 +152,8 @@ h3.sub {
   padding: 14px 16px; min-height: 48px; white-space: pre-wrap; word-break: break-word;
 }
 .result.error { border-color: var(--bad); color: var(--bad); }
+/* A column-aligned dump: scroll rather than wrap, or the columns fall apart. */
+pre.result { white-space: pre; overflow-x: auto; margin: 0 0 14px; }
 .kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; }
 .kv .k { color: var(--muted); }
 .kv .v { color: var(--text); }

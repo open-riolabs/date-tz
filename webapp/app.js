@@ -1,9 +1,7 @@
 import {
   DateTz,
-  MOROCCO_PERMANENT_UTC_FROM,
-  installMoroccoOverride,
-  runtimeKnowsMoroccoChange,
-  setTzProvider,
+  TzExceptions,
+  intlOffsetMinutes,
 } from './lib/index.js';
 
 // ─────────────────────── shared state / helpers ───────────────────────
@@ -11,6 +9,7 @@ import {
 const DEFAULT_CITIES = [
   'Etc/UTC',
   'Europe/London',
+  'Africa/Casablanca',
   'Europe/Rome',
   'Europe/Berlin',
   'Europe/Istanbul',
@@ -22,6 +21,7 @@ const DEFAULT_CITIES = [
   'Asia/Shanghai',
   'Australia/Sydney',
   'Pacific/Auckland',
+  'America/Vancouver',
   'America/Los_Angeles',
   'America/Denver',
   'America/Chicago',
@@ -348,59 +348,123 @@ manReset.addEventListener('click', rebuildFromSource);
 [manSrc, manPattern, manTz].forEach(el => el.addEventListener('change', rebuildFromSource));
 rebuildFromSource();
 
-// ─────────────────────── timezone data / Morocco ───────────────────────
+// ─────────────────────── timezone data / exceptions ───────────────────────
 
-const tzProbe = $('#tzProbe');
-const tzOverrideBtn = $('#tzOverrideBtn');
-const tzdataResult = $('#tzdataResult');
+const excDump = $('#excDump');
+const excCompare = $('#excCompare');
+const excResult = $('#excResult');
+const excTz = $('#excTz');
+const excFrom = $('#excFrom');
+const excTo = $('#excTo');
+const excOffset = $('#excOffset');
+const excDst = $('#excDst');
+const excDesc = $('#excDesc');
 
-const MOROCCO_ZONES = ['Africa/Casablanca', 'Africa/El_Aaiun'];
+const DAY_MS = 86_400_000;
 
-/** A minute after the transition, and a winter instant well past it. */
-const JUST_AFTER = MOROCCO_PERMANENT_UTC_FROM + 60_000;
-const NEXT_WINTER = DateTz.parse('2026-12-22 12:00:00', 'YYYY-MM-DD HH:mm:ss', 'Etc/UTC').timestamp;
-
-let overrideInstalled = false;
-
-function renderTzData() {
-  const knows = runtimeKnowsMoroccoChange();
-
-  tzProbe.innerHTML = knows
-    ? '<span class="chip">up to date</span> Your browser already resolves Morocco to UTC+0 after the change. The override would install nothing.'
-    : '<span class="chip dst">stale</span> Your browser still resolves Morocco to UTC+1 after the change. The override corrects it.';
-
-  tzOverrideBtn.disabled = knows;
-  tzOverrideBtn.textContent = overrideInstalled ? 'Remove override' : 'Install override';
-
-  const rows = [];
-  for (const tz of MOROCCO_ZONES) {
-    for (const [label, ts] of [['just after the transition', JUST_AFTER], ['the following winter', NEXT_WINTER]]) {
-      const d = new DateTz(ts, tz);
-      rows.push([`${tz} — ${label}`, `${d.toString()} · ${offsetStr(d.timezoneOffset)} · isDst ${d.isDst}`]);
-    }
-  }
-
-  // The last instant on the old rules, which no override should touch.
-  const before = new DateTz(MOROCCO_PERMANENT_UTC_FROM - 60_000, 'Africa/Casablanca');
-  rows.push(['Africa/Casablanca — a minute before', `${before.toString()} · ${offsetStr(before.timezoneOffset)}`]);
-
-  tzdataResult.replaceChildren(kvTable(rows));
+/**
+ * An instant the exception covers, far enough past its start that the old
+ * rules would already have moved the clock: 45 days after a change on the
+ * eve of autumn lands in the winter a stale browser still gets wrong.
+ */
+function probeInstant({ from, to }) {
+  if (from !== undefined && to !== undefined) return from + Math.floor((to - from) / 2);
+  if (from !== undefined) return from + 45 * DAY_MS;
+  if (to !== undefined) return to - DAY_MS;
+  return Date.now();
 }
 
-tzOverrideBtn.addEventListener('click', () => {
-  if (overrideInstalled) {
-    setTzProvider(null);
-    overrideInstalled = false;
-  } else {
-    overrideInstalled = installMoroccoOverride();
+function renderExceptions() {
+  excDump.textContent = TzExceptions.toString();
+
+  const exceptions = TzExceptions.list();
+  if (exceptions.length === 0) {
+    show(excCompare, 'No exceptions registered: every offset comes from your browser.');
+    return;
   }
-  renderTzData();
-  // Every other panel resolves offsets through the same provider.
-  rebuildFromSource();
+
+  const table = document.createElement('table');
+  table.innerHTML = '<thead><tr><th>Timezone</th><th>Probed at (UTC)</th><th>Your browser</th><th>DateTz resolves</th><th></th></tr></thead>';
+  const tbody = document.createElement('tbody');
+
+  for (const exception of exceptions) {
+    const tr = document.createElement('tr');
+    const cell = (text) => { const td = document.createElement('td'); td.textContent = text; tr.append(td); return td; };
+    const ts = probeInstant(exception);
+    cell(exception.timezone);
+    try {
+      const d = new DateTz(ts, exception.timezone);
+      const browser = intlOffsetMinutes(ts, exception.timezone);
+      cell(new DateTz(ts, 'Etc/UTC').toString('YYYY-MM-DD HH:mm'));
+      cell(offsetStr(browser * 60_000));
+      cell(`${offsetStr(d.timezoneOffset)}${d.isDst ? ' · DST' : ''} · ${d.toString('HH:mm')} local`);
+      cell('').innerHTML = browser * 60_000 === d.timezoneOffset
+        ? '<span class="chip ok">browser agrees</span>'
+        : '<span class="chip stale">browser is stale</span>';
+    } catch (err) {
+      const td = cell(err.message);
+      td.colSpan = 4;
+      td.style.color = 'var(--bad)';
+    }
+    tbody.append(tr);
+  }
+
+  table.append(tbody);
+  show(excCompare, table);
+}
+
+/** Every panel resolves offsets through the same registry, so all of them refresh. */
+function onRegistryChange(message) {
+  show(excResult, message);
+  renderExceptions();
+  tickHero();
   updateClockTiles();
+  runTs();
+  runParse();
+  runFmt();
+  runConv();
+  rebuildFromSource();
+}
+
+/** A datetime-local value, read as a UTC instant; empty means no bound. */
+function readUtc(input) {
+  return input.value ? DateTz.parse(input.value, 'YYYY-MM-DDTHH:mm', 'Etc/UTC').timestamp : undefined;
+}
+
+$('#excRegister').addEventListener('click', () => {
+  try {
+    const added = TzExceptions.register({
+      timezone: excTz.value.trim(),
+      from: readUtc(excFrom),
+      to: readUtc(excTo),
+      offset: excOffset.value === '' ? NaN : Number(excOffset.value),
+      isDst: excDst.checked,
+      description: excDesc.value.trim() || undefined,
+    });
+    onRegistryChange(added
+      ? 'register() → true'
+      : 'register() → false: an identical exception is already registered');
+  } catch (err) { show(excResult, err.message, true); }
 });
 
-renderTzData();
+$('#excUnregister').addEventListener('click', () => {
+  try {
+    const tz = excTz.value.trim();
+    onRegistryChange(`unregister('${tz}') → ${TzExceptions.unregister(tz)}`);
+  } catch (err) { show(excResult, err.message, true); }
+});
+
+$('#excReset').addEventListener('click', () => {
+  TzExceptions.reset();
+  onRegistryChange('reset() — the preloaded exceptions are back, and nothing else');
+});
+
+$('#excClear').addEventListener('click', () => {
+  TzExceptions.clear();
+  onRegistryChange('clear() — every offset now comes from your browser');
+});
+
+renderExceptions();
 
 // ─────────────────────── global tick ───────────────────────
 
