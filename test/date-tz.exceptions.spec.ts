@@ -431,7 +431,7 @@ describe('dates created before a change to the registry', () => {
     TzExceptions.unregister('America/Vancouver');
     expect(d.timezoneOffset).toBe(-7 * HOUR);
 
-    d.timezone = 'America/Vancouver';
+    d.setTimezone('America/Vancouver');
     expect(d.timezoneOffset / MINUTE).toBe(intlOffsetMinutes(winter, 'America/Vancouver'));
   });
 });

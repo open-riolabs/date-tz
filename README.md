@@ -49,12 +49,16 @@ Deprecated identifiers are resolved to the name the runtime supports, so `new Da
 
 ## Instance Properties
 
-Both properties are writable; assigning to either re-resolves `timezoneOffset` and `isDst` for the resulting instant.
+Four plain public fields. They are what an instance serialises to; see [Serialisation](#serialisation).
 
-| Property    | Type     | Description                                      |
-| ----------- | -------- | ------------------------------------------------ |
-| `timestamp` | `number` | Milliseconds since Unix epoch (UTC).             |
-| `timezone`  | `string` | IANA timezone identifier (e.g. `Europe/Rome`).   |
+| Property         | Type      | Description                                      |
+| ---------------- | --------- | ------------------------------------------------ |
+| `timestamp`      | `number`  | Milliseconds since Unix epoch (UTC).             |
+| `timezone`       | `string`  | IANA timezone identifier (e.g. `Europe/Rome`).   |
+| `timezoneOffset` | `number`  | Current offset from UTC in **milliseconds**.     |
+| `isDst`          | `boolean` | Whether the clock is ahead of the zone's standard offset. See [Timezone data](#timezone-data). |
+
+Assigning to `timestamp` or `timezone` directly does not recompute `timezoneOffset` and `isDst`, and does not normalise the zone identifier. Change the zone with [`setTimezone`](#settimezonetz-string-this) and move the instant with `add` or `set`: those keep all four fields in step.
 
 ---
 
@@ -72,8 +76,6 @@ Both properties are writable; assigning to either re-resolves `timezoneOffset` a
 | `second`          | `number`  | Second 0–59 in the instance's timezone.        |
 | `millisecond`     | `number`  | Millisecond 0–999 in the instance's timezone.  |
 | `dayOfWeek`       | `number`  | Day of week 0–6 (0 = Sunday) in the timezone.  |
-| `timezoneOffset`  | `number`  | Current offset from UTC in **milliseconds**.   |
-| `isDst`           | `boolean` | Whether the clock is ahead of the zone's standard offset. See [Timezone data](#timezone-data). |
 | `isLeapYear`      | `boolean` | Whether the current year is a leap year.       |
 
 ### UTC equivalents
@@ -212,7 +214,7 @@ summer.cloneToTimezone('Asia/Tokyo').toString(); // '2026-07-15 15:00:00'
 
 ### `setTimezone(tz: string): this`
 
-Changes the display zone **in place**, recomputing offset and DST. Equivalent to assigning to `timezone`.
+Changes the display zone **in place**, normalising the identifier and recomputing offset and DST. Assigning to `timezone` directly does neither.
 
 ---
 
@@ -299,13 +301,13 @@ Returns the canonical IANA timezone identifiers supported by the runtime.
 
 ## Serialisation
 
-Instances carry their state in ECMAScript private fields, so nothing leaks into the wire format under an internal name. `JSON.stringify` uses `toJSON()`, which emits exactly what the constructor reads back:
+An instance serialises as its four public fields, whatever copies it: `JSON.stringify`, a database driver, `structuredClone` or object spread.
 
 ```ts
 const d = new DateTz(1786621500000, 'Europe/Rome');
 
 JSON.stringify(d);
-// {"timestamp":1786621500000,"timezone":"Europe/Rome"}
+// {"timestamp":1786621500000,"timezone":"Europe/Rome","timezoneOffset":7200000,"isDst":true}
 
 const back = new DateTz(JSON.parse(JSON.stringify(d)));
 back.toString();   // '2026-08-13 13:45:00'
@@ -315,14 +317,12 @@ This holds when instances are nested inside a larger payload, which is the usual
 
 ```ts
 JSON.stringify({ bookingId: 42, start: d });
-// {"bookingId":42,"start":{"timestamp":1786621500000,"timezone":"Europe/Rome"}}
+// {"bookingId":42,"start":{"timestamp":1786621500000,"timezone":"Europe/Rome","timezoneOffset":7200000,"isDst":true}}
 ```
 
-`timezoneOffset` and `isDst` are deliberately **not** serialised. They are derived from the instant and the zone, and the receiving side resolves them against its own [timezone data](#timezone-data) rather than trusting numbers computed elsewhere, possibly by a runtime with an older copy of the database.
+The constructor reads back only `timestamp` and `timezone`. `timezoneOffset` and `isDst` are resolved again against the receiving runtime's own [timezone data](#timezone-data), so a payload computed elsewhere, possibly by a runtime with an older copy of the database, cannot carry a stale offset into a new instance.
 
-> **Transports that bypass `toJSON`.** `structuredClone`, object spread and `Object.assign` copy enumerable own properties and do not consult `toJSON`, so they see an empty object. Call `date.toJSON()` explicitly when the value crosses one of those.
-
-> **Fixed in 1.x.** Two state fields were briefly declared as TypeScript `private`, which is erased at compile time: the properties stayed enumerable at runtime under `_timestamp` and `_timezone`, so a serialised instance no longer had the names the constructor reads and rebuilding one threw `Invalid timestamp: undefined`.
+> **Changed in the release after 3.0.1.** The fields were hidden in two earlier releases, and serialisation broke both times. In 2.1.5–2.1.7 they were TypeScript `private` fields named `_timestamp` and `_timezone`, so rebuilding an instance threw `Invalid timestamp: undefined`. In 2.1.8–3.0.1 they were ECMAScript private fields behind a `toJSON()` that emitted only `timestamp` and `timezone`, so database drivers, `structuredClone` and object spread, which do not call `toJSON`, saw an empty object. They are public fields again, and `toJSON()` has been removed.
 
 ---
 

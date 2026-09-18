@@ -25,6 +25,13 @@ function daysInMonthOf(year: number, month: number): number {
 
 const BEFORE_EPOCH = 'Dates before 1970-01-01 are not supported';
 
+/** Rejects a value that is not an instant this library models. */
+function checkTimestamp(value: number): number {
+  if (!Number.isFinite(value)) throw new Error(`Invalid timestamp: ${value}`);
+  if (value < 0) throw new Error(BEFORE_EPOCH);
+  return value;
+}
+
 /**
  * The one vocabulary both `toString` and `parse` speak. Longer tokens come
  * first so `YYYY` is never read as `YY` followed by a stray `YY`.
@@ -212,20 +219,42 @@ function compose(parts: DateParts): number {
  * Calendar arithmetic (`add` with days, months or years, and `set`) works on
  * the local wall clock of `timezone`, while time units move the instant
  * itself; reading (`toString`, the component getters) renders that same
- * local clock. Offset and DST are re-resolved whenever the instant or the
- * zone changes, so a read always reflects the current state.
+ * local clock. Every method that moves the instant or changes the zone
+ * re-resolves offset and DST, so a read always reflects the current state.
  *
- * State lives in ECMAScript private fields, which are invisible to
- * `JSON.stringify`, `structuredClone` and object spread. What crosses a wire
- * is {@link toJSON}: a plain `IDateTz` of `timestamp` and `timezone` that
- * the constructor accepts back.
+ * The four fields below are the public interface and the serialised form:
+ * `JSON.stringify`, database drivers, `structuredClone` and object spread
+ * copy them as they are. Keep them plain public fields: `#private` fields
+ * and accessors are not own enumerable properties, so every one of those
+ * copies would leave them out.
  */
 export class DateTz implements IDateTz {
 
-  #timestamp: number;
-  #timezone: string;
-  #timezoneOffset: number;
-  #isDst: boolean;
+  /**
+   * The timestamp in milliseconds since the Unix epoch.
+   *
+   * Assigning to it directly does not re-resolve `timezoneOffset` and
+   * `isDst`; `add` and `set` do.
+   */
+  timestamp: number;
+
+  /**
+   * The timezone of the date.
+   *
+   * Assigning to it directly neither normalizes the identifier nor
+   * re-resolves `timezoneOffset` and `isDst`; {@link setTimezone} does both.
+   */
+  timezone: string;
+
+  /**
+   * The timezone offset in milliseconds.
+   */
+  timezoneOffset: number;
+
+  /**
+   * The daylight saving time status.
+   */
+  isDst: boolean;
 
   /**
    * The default date format used when converting to string.
@@ -234,6 +263,11 @@ export class DateTz implements IDateTz {
 
   /**
  * Creates an instance of DateTz.
+ *
+ * Only `timestamp` and `timezone` are read from an `IDateTz`: offset and DST
+ * are resolved again against this runtime's timezone data, whatever values
+ * the source carried.
+ *
  * @param value - The timestamp or an object implementing IDateTz.
  * @param tz - The timezone identifier (optional).
  */
@@ -242,51 +276,31 @@ export class DateTz implements IDateTz {
   constructor(value: number | IDateTz, tz?: string) {
     const timestamp = typeof value === 'object' ? value.timestamp : value;
     const timezone = typeof value === 'object' ? value.timezone : tz;
-    // Assign the zone through the private field: the timestamp setter below
-    // performs the single offset resolution once both are in place.
-    this.#timezone = DateTz.normalizeTimeZone(timezone);
-    this.timestamp = timestamp;
+    this.timezone = DateTz.normalizeTimeZone(timezone);
+    this.timestamp = checkTimestamp(timestamp);
+    // Resolved inline rather than through resolveOffset() so the compiler
+    // sees every field assigned in the constructor.
+    const tzOffset = getTzProvider().offsetAt(this.timestamp, this.timezone);
+    this.timezoneOffset = Math.round(tzOffset.offset * 60 * 1000);
+    this.isDst = tzOffset.isDst;
   }
 
-  /**
-   * The timestamp in milliseconds since the Unix epoch. Assigning to it
-   * re-resolves the timezone offset and DST state for the new instant.
-   */
-  get timestamp(): number {
-    return this.#timestamp;
-  }
-
-  set timestamp(value: number) {
-    if (!Number.isFinite(value)) throw new Error(`Invalid timestamp: ${value}`);
-    if (value < 0) throw new Error(BEFORE_EPOCH);
-    this.#timestamp = value;
-    this.resolveOffset();
-  }
-
-  /**
-   * The timezone of the date. Assigning to it normalizes the identifier and
-   * re-resolves the offset and DST state, preserving the absolute instant.
-   */
-  get timezone(): string {
-    return this.#timezone;
-  }
-
-  set timezone(tz: string) {
-    this.#timezone = DateTz.normalizeTimeZone(tz);
+  /** Moves the instant, re-resolving offset and DST for the new one. */
+  private setInstant(timestamp: number): void {
+    this.timestamp = checkTimestamp(timestamp);
     this.resolveOffset();
   }
 
   /** Re-resolves offset and DST for the current instant and zone. */
   private resolveOffset(): void {
-    if (this.#timestamp === undefined || this.#timezone === undefined) return;
-    const tzOffset = getTzProvider().offsetAt(this.#timestamp, this.#timezone);
-    this.#timezoneOffset = Math.round(tzOffset.offset * 60 * 1000);
-    this.#isDst = tzOffset.isDst;
+    const tzOffset = getTzProvider().offsetAt(this.timestamp, this.timezone);
+    this.timezoneOffset = Math.round(tzOffset.offset * 60 * 1000);
+    this.isDst = tzOffset.isDst;
   }
 
   /** The calendar components of this instant, local or UTC. */
   private parts(local: boolean): DateParts {
-    return decompose(this.#timestamp + (local ? this.#timezoneOffset : 0));
+    return decompose(this.timestamp + (local ? this.timezoneOffset : 0));
   }
 
   /**
@@ -335,7 +349,7 @@ export class DateTz implements IDateTz {
     // runtime: the numeric tokens would follow the provider while the names
     // followed Intl, and a single toString() could name the wrong weekday
     // for the date beside it.
-    const wallClock = this.#timestamp + this.#timezoneOffset;
+    const wallClock = this.timestamp + this.timezoneOffset;
     let formatterTzLong = new Intl.DateTimeFormat(locale, { timeZone: 'UTC', month: 'long', weekday: 'long' });
     let formatterTzShort = new Intl.DateTimeFormat(locale, { timeZone: 'UTC', month: 'short', weekday: 'short' });
 
@@ -365,29 +379,6 @@ export class DateTz implements IDateTz {
   }
 
   /**
-   * The serialisable form of this instance, used automatically by
-   * `JSON.stringify`.
-   *
-   * An instant and a zone are the whole state; offset and DST are derived
-   * from them and are deliberately left out, since a receiver resolves them
-   * against its own timezone data rather than trusting numbers that were
-   * computed elsewhere and may since have gone stale.
-   *
-   * The result is an `IDateTz`, so it round-trips straight back through the
-   * constructor:
-   *
-   * ```ts
-   * const wire = JSON.parse(JSON.stringify(date));
-   * const back = new DateTz(wire);
-   * ```
-   *
-   * @returns A plain object carrying `timestamp` and `timezone`.
-   */
-  toJSON(): IDateTz {
-    return { timestamp: this.#timestamp, timezone: this.#timezone };
-  }
-
-  /**
  * Adds a specified amount of time to the DateTz instance, in place.
  *
  * Time units — milliseconds through hours — move the instant itself: an
@@ -409,16 +400,16 @@ export class DateTz implements IDateTz {
 
     switch (unit) {
       case 'millisecond':
-        this.timestamp = this.#timestamp + value;
+        this.setInstant(this.timestamp + value);
         return this;
       case 'second':
-        this.timestamp = this.#timestamp + value * 1000;
+        this.setInstant(this.timestamp + value * 1000);
         return this;
       case 'minute':
-        this.timestamp = this.#timestamp + value * MS_PER_MINUTE;
+        this.setInstant(this.timestamp + value * MS_PER_MINUTE);
         return this;
       case 'hour':
-        this.timestamp = this.#timestamp + value * MS_PER_HOUR;
+        this.setInstant(this.timestamp + value * MS_PER_HOUR);
         return this;
     }
 
@@ -454,7 +445,7 @@ export class DateTz implements IDateTz {
    */
   private setLocalParts(parts: DateParts): void {
     const localAsUtc = compose(normalize(parts));
-    this.timestamp = localAsUtc - getOffsetSeconds(localAsUtc, this.#timezone) * 1000;
+    this.setInstant(localAsUtc - getOffsetSeconds(localAsUtc, this.timezone) * 1000);
   }
 
   /**
@@ -467,7 +458,7 @@ export class DateTz implements IDateTz {
    */
   cloneToTimezone(tz: string): DateTz {
     // Construct directly in the target zone so the constructor computes
-    // the right #timezoneOffset / #isDst from the start.
+    // the right timezoneOffset / isDst from the start.
     return new DateTz(this.timestamp, DateTz.normalizeTimeZone(tz));
   }
 
@@ -479,9 +470,10 @@ export class DateTz implements IDateTz {
  * @throws Error if the timezone is invalid.
  */
   setTimezone(tz: string): this {
-    // The setter normalizes the identifier and re-resolves offset and DST,
-    // so transitions (e.g. CET -> CEST) are handled automatically.
-    this.timezone = tz;
+    // Normalizing and re-resolving here is what handles transitions
+    // (e.g. CET -> CEST): assigning the field directly does neither.
+    this.timezone = DateTz.normalizeTimeZone(tz);
+    this.resolveOffset();
     return this;
   }
 
@@ -666,20 +658,6 @@ export class DateTz implements IDateTz {
   */
   get dayOfWeekUTC(): number {
     return this._dayOfWeek(false);
-  }
-
-  /**
-   * Gets the timezone offset in milliseconds.
-   */
-  get timezoneOffset() {
-    return this.#timezoneOffset;
-  }
-
-  /**
-   * Gets the daylight saving time status.
-   */
-  get isDst() {
-    return this.#isDst;
   }
 
   /**

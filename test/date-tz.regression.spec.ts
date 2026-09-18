@@ -41,15 +41,13 @@ describe('offset and DST stay in sync with the instant', () => {
     expect(d.toString()).toBe(intlRead(d.timestamp, 'Europe/Rome'));
   });
 
-  it('re-resolves them on direct assignment to timestamp and timezone', () => {
-    const d = DateTz.parse('2025-01-15 12:00:00', 'YYYY-MM-DD HH:mm:ss', 'Europe/Rome');
+  it('re-resolves them after setTimezone()', () => {
+    const d = DateTz.parse('2025-07-15 12:00:00', 'YYYY-MM-DD HH:mm:ss', 'Europe/Rome');
 
-    d.timestamp = Date.UTC(2025, 6, 15, 10, 0, 0);
-    expect(d.isDst).toBe(true);
-    expect(d.toString()).toBe(intlRead(d.timestamp, 'Europe/Rome'));
-
-    d.timezone = 'Asia/Tokyo';
+    d.setTimezone('Asia/Tokyo');
     expect(d.timestamp).toBe(Date.UTC(2025, 6, 15, 10, 0, 0));
+    expect(d.timezoneOffset).toBe(9 * 3600000);
+    expect(d.isDst).toBe(false);
     expect(d.toString()).toBe(intlRead(d.timestamp, 'Asia/Tokyo'));
   });
 
